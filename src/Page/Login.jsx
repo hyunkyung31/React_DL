@@ -11,16 +11,17 @@ export default function Login({ onLoginSuccess }) {
     setErrorMessage('')
 
     try {
-      const response = await axios.post('http://127.0.0.1:8000/api/token/', {
+      const response = await axios.post('http://127.0.0.1:8000/api/login/', {
         username,
         password,
       })
     
 
-      const { access, refresh } = response.data
+      const { access, refresh, doctor_name } = response.data
       localStorage.setItem('access', access)
       localStorage.setItem('refresh', refresh)
-      onLoginSuccess(username)
+
+      onLoginSuccess(doctor_name || username)
     } catch (error) {
       console.error('로그인 실패:', error)
       setErrorMessage(
