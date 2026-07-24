@@ -11,24 +11,20 @@ export default function Login({ onLoginSuccess }) {
     setErrorMessage('')
 
     try {
-      // Django 백엔드 로그인 API 호출
-      const response = await axios.post('http://127.0.0.1:8000/api/login/', {
-        username: username,
-<<<<<<< Updated upstream
-        password: password 
-=======
-        password: password
->>>>>>> Stashed changes
+      const response = await axios.post('http://127.0.0.1:8000/api/token/', {
+        username,
+        password,
       })
+    
 
-      if (response.data.success) {
-        // 로그인 성공 시 부모 컴포넌트에 성공 알림 및 사용자 이름 전달
-        onLoginSuccess(response.data.name || username)
-      }
+      const { access, refresh } = response.data
+      localStorage.setItem('access', access)
+      localStorage.setItem('refresh', refresh)
+      onLoginSuccess(username)
     } catch (error) {
       console.error('로그인 실패:', error)
       setErrorMessage(
-        error.response?.data?.message || '아이디 또는 비밀번호가 올바르지 않습니다.'
+        error.response?.data?.detail || '아이디 또는 비밀번호가 올바르지 않습니다.'
       )
     }
   }
