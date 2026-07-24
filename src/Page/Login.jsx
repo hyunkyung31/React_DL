@@ -14,7 +14,7 @@ export default function Login({ onLoginSuccess }) {
 
     try {
       // 1. 백엔드 JWT 토큰 발급 엔드포인트 호출
-      const response = await axios.post('http://127.0.0.1:8000/api/token/', {
+      const response = await axios.post('http://127.0.0.1:8000/api/login/', {
         username,
         password,
       })

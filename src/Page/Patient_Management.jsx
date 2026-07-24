@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React,{ useState } from 'react'
 
 export default function PatientManagement({ patients, errorMessage, onSelectPatient }) {
   const [searchTerm, setSearchTerm] = useState('')
