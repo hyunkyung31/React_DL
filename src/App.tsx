@@ -4,6 +4,8 @@ import './App.css'
 import Login from './Page/Login'
 import Dashboard from './Page/Dashboard'
 
+const API_BASE = 'http://35.234.39.234:8000'
+
 // 환자 데이터 타입 정의 (TypeScript 인터페이스)
 interface Patient {
   patient_id: string
@@ -28,7 +30,8 @@ function App() {
 
   // 백엔드 헬스 체크 API 연결
   useEffect(() => {
-    axios.get('http://127.0.0.1:8000/api/health/')
+    axios
+      .get(`${API_BASE}/api/health/`)
       .then(response => {
         setHealthStatus(response.data.message)
       })
@@ -62,7 +65,7 @@ function App() {
     if (!access) return
 
     axios
-      .get('http://127.0.0.1:8000/api/patients/', {
+      .get(`${API_BASE}/api/patients/`, {
         headers: { Authorization: `Bearer ${access}` },
       })
       .then((res) => {

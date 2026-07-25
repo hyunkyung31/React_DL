@@ -14,13 +14,13 @@ export default function Login({ onLoginSuccess }) {
 
     try {
       // 1. 백엔드 JWT 토큰 발급 엔드포인트 호출
-      const response = await axios.post('http://127.0.0.1:8000/api/login/', {
+      const response = await axios.post('http://35.234.39.234:8000/api/login/', {
         username,
         password,
       })
 
       // 2. 토큰 및 사용자 정보 로컬 스토리지 저장
-      const { access, refresh, name } = response.data
+      const { access, refresh, doctor_name } = response.data
       localStorage.setItem('access', access)
       localStorage.setItem('refresh', refresh)
       
