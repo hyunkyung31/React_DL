@@ -1,9 +1,118 @@
 import { useState } from 'react'
 import axios from 'axios'
-import PatientManagement from './Patient_Management'
 import PatientDetail from './Patient_Detail'
-import { data } from 'autoprefixer'
+import Main_viewer from '../Components/Main_viewer'
 
+// ==========================================
+// 1. PatientManagement 컴포넌트 (유지)
+// ==========================================
+export function PatientManagement({ patients, errorMessage, onSelectPatient }) {
+  const [searchTerm, setSearchTerm] = useState('')
+  const [searchCategory, setSearchCategory] = useState('all')
+
+  const filteredPatients = patients.filter((patient) => {
+    if (!patient) return false
+    const name = patient.patient_name || ''
+    const id = patient.patient_id || ''
+
+    if (searchCategory === 'name') {
+      return name.includes(searchTerm)
+    } else if (searchCategory === 'id') {
+      return String(id).includes(searchTerm)
+    }
+    return name.includes(searchTerm) || String(id).includes(searchTerm)
+  })
+
+  return (
+    <div className="flex-1 p-6 bg-gray-950 text-gray-100 overflow-y-auto">
+      <div className="max-w-6xl mx-auto space-y-6">
+        
+        {/* 페이지 타이틀 및 검색 바 영역 */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-gray-900 p-6 rounded-xl border border-gray-800">
+          <div>
+            <h2 className="text-xl font-bold text-white">담당 환자 목록 관리</h2>
+            <p className="text-xs text-gray-400 mt-1">등록된 환자를 검색하고 임상 상태를 확인하세요.</p>
+          </div>
+          
+          {/* 검색 컨트롤 */}
+          <div className="flex items-center space-x-2">
+            <select 
+              value={searchCategory}
+              onChange={(e) => setSearchCategory(e.target.value)}
+              className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-white focus:outline-none focus:border-blue-500"
+            >
+              <option value="all">전체</option>
+              <option value="name">환자명</option>
+              <option value="id">환자 ID</option>
+            </select>
+
+            <input 
+              type="text" 
+              placeholder="검색어를 입력하세요" 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+        </div>
+
+        {errorMessage && <p className="text-red-400 font-semibold">{errorMessage}</p>}
+
+        {/* 환자 목록 테이블 */}
+        <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden shadow-xl">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-800/50 text-gray-400 text-xs uppercase tracking-wider border-b border-gray-800">
+                <th className="px-6 py-3 font-semibold">환자 ID</th>
+                <th className="px-6 py-3 font-semibold">환자명</th>
+                <th className="px-6 py-3 font-semibold">나이/성별</th>
+                <th className="px-6 py-3 font-semibold">주호소</th>
+                <th className="px-6 py-3 font-semibold">ECG 결과</th>
+                <th className="px-6 py-3 font-semibold text-center">관리 메뉴</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-800 text-sm">
+              {filteredPatients.length > 0 ? (
+                filteredPatients.map((patient) => (
+                  <tr key={patient.patient_id} className="hover:bg-gray-800/30 transition-colors">
+                    <td className="px-6 py-4 font-mono text-gray-300">{patient.patient_id}</td>
+                    <td className="px-6 py-4 font-medium text-white">{patient.patient_name}</td>
+                    <td className="px-6 py-4 text-gray-300">{patient.age}세 / {patient.gender}</td>
+                    <td className="px-6 py-4 text-gray-300">{patient.chief_complaint || '-'}</td>
+                    <td className="px-6 py-4">
+                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-950 text-blue-400 border border-blue-800">
+                        {patient.ecg_result || '정상'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <button 
+                        onClick={() => onSelectPatient && onSelectPatient(patient)}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded transition-colors shadow"
+                      >
+                        상세보기
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                    검색 결과가 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+  )
+}
+
+// ==========================================
+// 2. Dashboard 메인 컴포넌트
+// ==========================================
 export default function Dashboard({ 
   displayName, 
   healthStatus, 
@@ -53,14 +162,11 @@ export default function Dashboard({
         }
 
         const results = await response.json()
-        const patientList = data.results || []
 
         if (results && results.length > 0) {
           if (results.length === 1) {
-            // 결과가 1명이면 곧바로 상세 페이지로 이동
             handleSelectPatient(results[0])
           } else {
-            // 결과가 여러명이면 드롭다운 목록에 띄워서 선택하게 함
             setSearchResults(results)
             setIsSearchDropdownOpen(true)
           }
@@ -71,7 +177,7 @@ export default function Dashboard({
       } catch (error) {
         console.error('검색 중 오류 발생:', error)
         
-        // API 연동 전 로컬 테스트용 (전체 환자 데이터가 없으므로 현재 담당 환자 목록 기준 부분 검색 폴백)
+        // API 연동 실패 시 현재 담당 환자 목록 기준 폴백 검색
         const matchedLocal = patients.filter(p => 
           p.patient_name.toLowerCase().includes(keyword.toLowerCase()) || 
           String(p.patient_id).toLowerCase().includes(keyword.toLowerCase())
@@ -202,15 +308,12 @@ export default function Dashboard({
           ) : (
             <main className="flex-1 p-4 overflow-y-auto grid grid-cols-3 gap-4 bg-gray-950">
               <div className="col-span-2 flex flex-col space-y-4">
-                <div className="flex-1 bg-black rounded-lg border border-gray-800 flex items-center justify-center text-gray-400 min-h-[400px]">
-                  [ 3. Main Viewer 영역 ]
-                </div>
-                <div className="h-20 bg-gray-900 rounded-lg border border-gray-800 flex items-center justify-center text-gray-300 shrink-0">
-                  [ 6. 재생 컨트롤 / 타임라인 ]
+                <div className="flex-1 min-h-[500px]">
+                  <Main_viewer />
                 </div>
               </div>
 
-              <div className="flex flex-col space-y-4">
+              <div className="flex flex-1 flex-col space-y-4">
                 <div className="flex-1 bg-gray-900 rounded-lg border border-gray-800 p-4">
                   <h2 className="font-semibold text-sm text-white mb-2">[ 4. AI 결과 패널 ]</h2>
                   <div className="text-xs text-gray-300">진단 요약 및 신뢰도 표시 영역</div>
