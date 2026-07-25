@@ -24,7 +24,7 @@ export default function Login({ onLoginSuccess }) {
       localStorage.setItem('access', access)
       localStorage.setItem('refresh', refresh)
       
-      const doctorName = name || username || '의사'
+      const doctorName = doctor_name || username || '의사'
       localStorage.setItem('doctor_name', doctorName)
 
       // 3. App 컴포넌트로 로그인 성공 전달
