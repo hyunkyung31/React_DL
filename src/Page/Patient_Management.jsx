@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React,{ useState } from 'react'
 
 export default function PatientManagement({ patients, errorMessage, onSelectPatient }) {
   const [searchTerm, setSearchTerm] = useState('')
@@ -24,7 +24,7 @@ export default function PatientManagement({ patients, errorMessage, onSelectPati
         {/* 페이지 타이틀 및 검색 바 영역 */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-gray-900 p-6 rounded-xl border border-gray-800">
           <div>
-            <h2 className="text-xl font-bold text-white">환자 목록 관리</h2>
+            <h2 className="text-xl font-bold text-white">담당 환자 목록 관리</h2>
             <p className="text-xs text-gray-400 mt-1">등록된 환자를 검색하고 임상 상태를 확인하세요.</p>
           </div>
           
