@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import axios from 'axios'
 
-const API_BASE = 'http://35.234.39.234:8000'
+const API_BASE = 'http://34.80.83.7:8000'
 
 export default function Login({ onLoginSuccess, onBackToIntro }) {
   const [username, setUsername] = useState('')

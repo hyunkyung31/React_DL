@@ -56,8 +56,8 @@ export default function ConsultationView({ selectedPatient, currentUserName }) {
 
       // 병렬로 API 호출
       const [patientRes, doctorRes] = await Promise.all([
-        fetch('http://35.234.39.234:8000/api/patients', { headers }),
-        fetch('http://35.234.39.234:8000/api/doctors', { headers })
+        fetch('http://34.80.83.7:8000/api/patients', { headers }),
+        fetch('http://34.80.83.7:8000/api/doctors', { headers })
       ])
 
       if (patientRes.ok) {
@@ -119,7 +119,7 @@ export default function ConsultationView({ selectedPatient, currentUserName }) {
         ...(token ? { 'Authorization': `Bearer ${token}` } : {})
       }
 
-      const response = await fetch('http://35.234.39.234:8000/api/consultations', {
+      const response = await fetch('http://34.80.83.7:8000/api/consultations', {
         method: 'POST',
         headers,
         body: JSON.stringify(newForm)
@@ -128,7 +128,7 @@ export default function ConsultationView({ selectedPatient, currentUserName }) {
       if (!response.ok) throw new Error('요청 전송에 실패했습니다.')
       
       // 목록 새로고침
-      const consultRes = await fetch('http://35.234.39.234:8000/api/consultations', { headers })
+      const consultRes = await fetch('http://34.80.83.7:8000/api/consultations', { headers })
       if (consultRes.ok) {
         const data = await consultRes.json()
         setConsultations(data)
