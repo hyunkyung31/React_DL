@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import angioImage from '../assets/angio_sample.png'
 import { Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from 'lucide-react'
 
-function Main_viewer() {
+function Main_viewer({
+    overlayMode,
+    confidenceThreshold,
+}) {
     const [currentFrame, setCurrentFrame] = useState(125)
     const [isPlaying, setIsPlaying] = useState(false)
     const [selectedSeries, setSelectedSeries] = useState('1')
@@ -11,6 +14,11 @@ function Main_viewer() {
     const [isZoomMode, setIsZoomMode] = useState(false)
     const [isDragging, setIsDragging] = useState(false)
     const [isFullscreen, setIsFullscreen] = useState(false)
+    const [isImageLoaded, setIsImageLoaded] = useState(false)
+
+    const imageRef = useRef(null)
+    const overlayCanvasRef = useRef(null)
+    const heatmapCanvasRef = useRef(null)
 
     const [position, setPosition] = useState({ x: 0, y: 0 })
     const dragStartRef = useRef({ mouseX: 0, mouseY: 0, imageX: 0, imageY: 0 })
@@ -19,6 +27,26 @@ function Main_viewer() {
     const totalFrames = 250
 
     // 자동 재생
+    const mockBoundingBoxes = [{
+        id: 1,
+        x: 100,
+        y: 100,
+        width: 200,
+        height: 200,
+        label: 'Stenosis',
+        confidence: 0.92,
+    },
+    {
+        id: 2,
+        x: 365,
+        y: 310,
+        width: 105,
+        height: 80,
+        label: 'Stenosis',
+        confidence: 0.81,
+    },
+    ]
+
     useEffect(() => {
         if (!isPlaying) return
 
@@ -38,10 +66,140 @@ function Main_viewer() {
 
     // 전체화면 상태 감지
     useEffect(() => {
-        const handleFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement))
-        document.addEventListener('fullscreenchange', handleFullscreenChange)
-        return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+        const handleFullscreenChange = () => {
+            setIsFullscreen(Boolean(document.fullscreenElement))
+    }
+
+        document.addEventListener(
+            'fullscreenchange',
+            handleFullscreenChange
+        )
+
+        return () => {
+            document.removeEventListener(
+            'fullscreenchange',
+            handleFullscreenChange
+            )
+        }
     }, [])
+
+    // Bounding Box Canvas 렌더링
+    useEffect(() => {
+        const image = imageRef.current
+        const canvas = overlayCanvasRef.current
+
+        if (!image || !canvas || !isImageLoaded) return
+
+        const drawBoundingBoxes = () => {
+            const imageWidth = image.clientWidth
+            const imageHeight = image.clientHeight
+
+            if (imageWidth === 0 || imageHeight === 0) return
+
+            const pixelRatio = window.devicePixelRatio || 1
+
+            canvas.width = imageWidth * pixelRatio
+            canvas.height = imageHeight * pixelRatio
+            canvas.style.width = `${imageWidth}px`
+            canvas.style.height = `${imageHeight}px`
+
+            const context = canvas.getContext('2d')
+
+            context.setTransform(
+                pixelRatio,
+                0,
+                0,
+                pixelRatio,
+                0,
+                0
+            )
+
+            // 이전에 그린 내용을 전체 삭제
+            context.clearRect(
+                0,
+                0,
+                imageWidth,
+                imageHeight
+            )
+
+            const shouldShowBoundingBox =
+                overlayMode === 'boundingBox' ||
+                overlayMode === 'both'
+
+            if (!shouldShowBoundingBox) return
+
+            const scaleX = imageWidth / image.naturalWidth
+            const scaleY = imageHeight / image.naturalHeight
+
+            mockBoundingBoxes
+                .filter(
+                    (box) =>
+                        box.confidence * 100 >= confidenceThreshold
+                )
+            .forEach((box) => {
+                const boxX = box.x * scaleX
+                const boxY = box.y * scaleY
+                const boxWidth = box.width * scaleX
+                const boxHeight = box.height * scaleY
+
+                const labelText = `${box.label} ${Math.round(
+                    box.confidence * 100
+                )}%`
+
+            context.strokeStyle = '#ef4444'
+            context.lineWidth = 5
+
+            context.strokeRect(
+                boxX,
+                boxY,
+                boxWidth,
+                boxHeight
+            )
+
+            context.font = 'bold 18px sans-serif'
+
+            const labelWidth =
+                context.measureText(labelText).width + 12
+
+            const labelHeight = 22
+
+            context.fillStyle = '#ef4444'
+
+            context.fillRect(
+                boxX,
+                Math.max(boxY - labelHeight, 0),
+                labelWidth,
+                labelHeight
+            )
+
+            context.fillStyle = '#ffffff'
+
+            context.fillText(
+                labelText,
+                boxX + 6,
+                Math.max(boxY - 7, 15)
+            )
+        })
+    }
+
+    drawBoundingBoxes()
+
+    window.addEventListener(
+        'resize',
+        drawBoundingBoxes
+    )
+
+    return () => {
+        window.removeEventListener(
+        'resize',
+        drawBoundingBoxes
+        )
+    }
+    }, [
+        overlayMode,
+        confidenceThreshold,
+        isImageLoaded,
+    ])
 
     const handlePreviousFrame = () => {
         setIsPlaying(false)
@@ -209,17 +367,36 @@ function Main_viewer() {
 
                 {/* 이미지 본문 */}
                 <div className="flex h-full w-full items-center justify-center">
-                    <img
-                        src={angioImage}
-                        alt="혈관조영술"
-                        className="max-h-full max-w-full object-contain"
+                    <div
+                        className="relative inline-block max-h-full max-w-full"
                         style={{
                             transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
                             transformOrigin: 'center center',
-                            transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+                            transition: isDragging
+                                ? 'none' : 'transform 0.1s ease-out',
+                        }}
+                    >
+                    <img
+                        ref={imageRef}
+                        src={angioImage}
+                        alt="혈관조영술"
+                        onLoad={() => setIsImageLoaded(true)}
+                        className="max-h-full max-w-full select-none object-contain"
+                        style={{
+                            transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                            transformOrigin: 'center center',
+                            transition: isDragging
+                            ? 'none'
+                            : 'transform 0.1s ease-out',
                         }}
                         draggable={false}
                     />
+                    <canvas 
+                        ref={overlayCanvasRef}
+                        className="pointer-events-none absolute left-0 top-0 h-full w-full"
+                        aria-label="AI 협착 탐지 Bounding Box"
+                    />
+                    </div>
                 </div>
 
                 {/* 좌우 프레임 이동 버튼 */}
@@ -231,6 +408,7 @@ function Main_viewer() {
                 >
                     <ChevronLeft size={24} />
                 </button>
+
                 <button
                     type="button"
                     onClick={handleNextFrame}
@@ -245,6 +423,7 @@ function Main_viewer() {
                     <p>RCA</p>
                     <p>W: 4095 / L: 2048</p>
                 </div>
+
             </div>
 
             {/* 하단 재생 컨트롤 */}

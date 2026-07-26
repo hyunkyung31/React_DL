@@ -11,6 +11,7 @@ import {
   Video, FileBarChart, Settings, Square 
 } from 'lucide-react'
 import angioImage from '../assets/angio_sample.png'
+import Xai_visualization from '../Components/Xai_visualization'
 
 // ==========================================
 // 1. PatientManagement 컴포넌트
@@ -127,6 +128,11 @@ export default function Dashboard({
 }) {
   const [currentMenu, setCurrentMenu] = useState('dashboard')
   const [selectedPatient, setSelectedPatient] = useState(null)
+
+  // XAI 시각화 상태 
+  const [overlayMode, setOverlayMode] = useState('both')
+  const [heatmapOpacity, setHeatmapOpacity] = useState(50)
+  const [confidenceThreshold, setConfidenceThreshold] = useState(50)
   
   const [sidebarSearch, setSidebarSearch] = useState('')
   const [searchResults, setSearchResults] = useState([])
@@ -734,6 +740,15 @@ const handleAiPredict = async () => {
                       )
                     )}
                   </div>
+                <div>
+                  <Xai_visualization 
+                      overlayMode={overlayMode}
+                      setOverlayMode={setOverlayMode}
+                      heatmapOpacity={heatmapOpacity}
+                      setHeatmapOpacity={setHeatmapOpacity}
+                      confidenceThreshold={confidenceThreshold}
+                      setConfidenceThreshold={setConfidenceThreshold}
+                  />
                 </div>
                 <div className="bg-gray-900 rounded-lg border border-gray-800 p-4 shrink-0">
                   <div className="flex items-center justify-between mb-2">
@@ -755,7 +770,7 @@ const handleAiPredict = async () => {
                   </div>
                 </div>
               </div>
-
+            </div>
             </main>
           )}
         </div>
