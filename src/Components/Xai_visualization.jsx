@@ -1,7 +1,6 @@
 import {
   Box,
   Flame,
-  Layers3,
   BrainCircuit,
   ShieldCheck,
   TriangleAlert,
@@ -29,11 +28,6 @@ function Xai_visualization({
         value: 'heatmap',
         label: 'Heatmap',
         icon: Flame,
-    },
-    {
-        value: 'both',
-        label: '동시 표시',
-        icon: Layers3,
     },
   ]
 
@@ -64,7 +58,7 @@ function Xai_visualization({
             시각화 모드
           </p>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {overlayOptions.map((option) => {
               const Icon = option.icon
               const isSelected = overlayMode === option.value
@@ -87,20 +81,6 @@ function Xai_visualization({
               )
             })}
           </div>
-        </div>
-
-        {/* 현재 선택 상태 */}
-        <div className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-3">
-          <p className="text-xs text-gray-400">
-            현재 표시 모드
-          </p>
-
-          <p className="mt-1 text-sm font-semibold text-white">
-            {overlayMode === 'boundingBox' && 'Bounding Box만 표시'}
-            {overlayMode === 'heatmap' && 'Heatmap만 표시'}
-            {overlayMode === 'both' &&
-              'Bounding Box + Heatmap 동시 표시'}
-          </p>
         </div>
 
         {/* Heatmap 투명도 */}
