@@ -262,7 +262,7 @@ export default function Dashboard({
 
       try {
         const response = await fetch(
-          `http://35.234.39.234:8000/api/patients/search/?q=${encodeURIComponent(keyword)}`,
+          `http://34.80.83.7:8000/api/patients/search/?q=${encodeURIComponent(keyword)}`,
           {
             headers: {
               Authorization: `Bearer ${access}`,
@@ -314,7 +314,7 @@ const handleAiPredict = async () => {
   try {
     const formData = new FormData()
     formData.append('file', aiFile)
-    const response = await fetch('http://35.234.39.234:8000/api/ai/predict/', {
+    const response = await fetch('http://34.80.83.7:8000/api/ai/predict/', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${access}`,
