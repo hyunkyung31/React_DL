@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import axios from 'axios'
 import PatientDetail from './Patient_Detail'
 import Main_viewer from '../Components/Main_viewer'
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import angioImage from '../assets/angio_sample.png'
 import Xai_visualization from '../Components/Xai_visualization'
+import Mace_risk from "../Components/Mace_risk"
 
 // ==========================================
 // 1. PatientManagement 컴포넌트
@@ -135,6 +136,7 @@ export default function Dashboard({
   const [heatmapOpacity, setHeatmapOpacity] = useState(50)
   const [confidenceThreshold, setConfidenceThreshold] = useState(50)
   const [isViewerImageLoaded, setIsViewerImageLoaded] = useState(false)
+  const [aiPreviewUrl, setAiPreviewUrl] = useState(null)
 
   const viewerImageRef = useRef(null)
   const heatmapCanvasRef = useRef(null)
@@ -161,6 +163,14 @@ export default function Dashboard({
   const [aiError, setAiError] = useState('')
   const [isAiDragOver, setIsAiDragOver] = useState(false)
 
+  // 실제 XAI 응답 우선, 없으면 Mock 사용
+  const xaiData = useMemo(() => { return {
+    showGradcam: aiResult?.show_gradcam ?? aiResult?.predicted_label === 'Stenosis',
+    heatmapBase64: aiResult?.heatmap_base64 ?? null,
+    overlayBase64: aiResult?.overlay_base64 ?? null,
+    boundingBoxes: aiResult?.bounding_boxes ?? aiResult?.boxes ?? [{ id: 1, x: 120, y: 90, width: 150, height: 120, label: 'Stenosis', confidence: 0.94,},],}
+  }, [aiResult])
+
   // 뷰어 인터랙션 상태 (줌인, 줌아웃, 팬, 전체화면)
   const [scale, setScale] = useState(1)
   const [position, setPosition] = useState({ x: 0, y: 0 })
@@ -184,12 +194,26 @@ export default function Dashboard({
     return () => clearInterval(timer)
   }, [isPlaying, playbackSpeed, totalFrames])
 
-  // 임시 XAI Heatmap 렌더링
+  // XAI Heatmap 렌더링
 useEffect(() => {
   const image = viewerImageRef.current
   const canvas = heatmapCanvasRef.current
 
   if (!image || !canvas || !isViewerImageLoaded) return
+
+  if (!aiResult) {
+    const context = canvas.getContext('2d')
+
+    if (context) {
+      context.clearRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      )
+    }
+    return
+  }
 
   const drawHeatmap = () => {
     const imageWidth = image.clientWidth
@@ -226,6 +250,9 @@ useEffect(() => {
 
     // Heatmap 모드에서만 표시
     if (overlayMode !== 'heatmap') return
+
+    // 실제 Grad-CAM이 있으면 Mock Heatmap은 그리지 않음
+    if (xaiData.heatmapBase64) return
 
     const opacity = heatmapOpacity / 100
 
@@ -292,6 +319,8 @@ useEffect(() => {
   overlayMode,
   heatmapOpacity,
   isViewerImageLoaded,
+  aiResult,
+  xaiData.heatmapBase64,
 ])
 
   // Bounding Box 렌더링
@@ -300,6 +329,20 @@ useEffect(() => {
     const canvas = boundingBoxCanvasRef.current
 
     if (!image || !canvas || !isViewerImageLoaded) return
+
+    if (!aiResult) {
+      const context = canvas.getContext('2d')
+
+      if (context) {
+        context.clearRect(
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        )
+      }
+      return
+  }
 
     const drawBoundingBoxes = () => {
       const imageWidth = image.clientWidth
@@ -337,26 +380,12 @@ useEffect(() => {
     // Bounding Box 모드에서만 표시
     if (overlayMode !== 'boundingBox') return
 
-    const mockBoundingBoxes = [
-      {
-        id: 1,
-        x: 120,
-        y: 90,
-        width: 150,
-        height: 120,
-        label: 'Stenosis',
-        confidence: 0.94,
-      },
-    ]
-
     const scaleX = imageWidth / image.naturalWidth
     const scaleY = imageHeight / image.naturalHeight
 
-    mockBoundingBoxes
-      .filter(
-        (box) =>
-          box.confidence * 100 >= confidenceThreshold
-      )
+    xaiData.boundingBoxes
+      .filter((box) => Number(box.confidence ?? 0) * 100 >= confidenceThreshold)
+
       .forEach((box) => {
         const boxX = box.x * scaleX
         const boxY = box.y * scaleY
@@ -397,11 +426,7 @@ useEffect(() => {
     return () => {
       window.removeEventListener('resize', drawBoundingBoxes)
     }
-}, [
-  overlayMode,
-  confidenceThreshold,
-  isViewerImageLoaded,
-])
+}, [overlayMode, confidenceThreshold, isViewerImageLoaded, aiResult, xaiData.boundingBoxes,])
 
   // 뷰어 마우스 드래그 팬(Pan) 핸들러
   const handleMouseDown = (e) => {
@@ -552,6 +577,7 @@ const handleAiPredict = async () => {
       throw new Error('AI 분석 요청 실패')
     }
     const data = await response.json()
+    console.log('AI 응답 전체:', data)
     setAiResult(data)
   } catch (error) {
     console.error(error)
@@ -804,12 +830,20 @@ const handleAiPredict = async () => {
                     >
                       <img
                         ref={viewerImageRef}
-                        src={angioImage}
+                        src={aiPreviewUrl || angioImage}
                         alt="혈관조영술"
                         onLoad={() => setIsViewerImageLoaded(true)}
                         className="block max-h-full max-w-full object-contain pointer-events-none"
                         draggable={false}
                       />
+
+                      {overlayMode === 'heatmap' && aiResult && xaiData.showGradcam && xaiData.heatmapBase64 && (
+                        <img
+                          src={`data:image/png;base64,${xaiData.heatmapBase64}`}
+                          alt="Grad-CAM Heatmap"
+                          className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+                          style={{ opacity: heatmapOpacity / 100, }} /> )}
+
                       <canvas
                         ref={heatmapCanvasRef}
                         className="pointer-events-none absolute left-0 top-0 h-full w-full"
@@ -945,6 +979,8 @@ const handleAiPredict = async () => {
                           return
                         }
                         setAiFile(file)
+                        setAiPreviewUrl(URL.createObjectURL(file))
+
                         setAiResult(null)
                         setAiError('')
                       }}
@@ -957,7 +993,11 @@ const handleAiPredict = async () => {
                         type="file"
                         accept="image/*"
                         onChange={(e) => {
-                          setAiFile(e.target.files?.[0] || null)
+                          const file = e.target.files?.[0] || null
+
+                          setAiFile(file)
+                          setAiPreviewUrl(file ? URL.createObjectURL(file) : null)
+
                           setAiResult(null)
                           setAiError('')
                         }}
@@ -1016,7 +1056,20 @@ const handleAiPredict = async () => {
                       setHeatmapOpacity={setHeatmapOpacity}
                       confidenceThreshold={confidenceThreshold}
                       setConfidenceThreshold={setConfidenceThreshold}
+                      confidenceScore={
+                        aiResult?.confidence != null
+                          ? Number((aiResult.confidence * 100).toFixed(1)) : null
+                      }
+                      uncertaintyScore={
+                        aiResult?.confidence != null
+                          ? Number(((1 - aiResult.confidence) * 100).toFixed(1)) : null
+                      }
+                      aiLoading={aiLoading}
+                      hasAiResult={Boolean(aiResult)}
                   />
+                </div>
+                <div className="mt-4">
+                  <Mace_risk />
                 </div>
               </div>
             </div>

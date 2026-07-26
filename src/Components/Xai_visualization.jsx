@@ -13,11 +13,11 @@ function Xai_visualization({
     setHeatmapOpacity,
     confidenceThreshold,
     setConfidenceThreshold,
+    confidenceScore,
+    uncertaintyScore,
+    aiLoading,
+    hasAiResult,
 }) {
-
-  // 실제 AI API 연결 전까지 사용할 임시 데이터
-    const confidenceScore = 87
-    const uncertaintyScore = 13
 
     const overlayOptions = [{
         value: 'boundingBox',
@@ -46,9 +46,13 @@ function Xai_visualization({
           </p>
         </div>
 
-        <span className="rounded-full bg-blue-500/15 px-2.5 py-1 text-xs font-medium text-blue-300">
-          분석 완료
-        </span>
+        {aiLoading ? (
+            <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-300">분석 중...</span>
+        ) : hasAiResult ? (
+            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-300">분석 완료</span>
+        ) : (
+            <span className="rounded-full border border-gray-600 bg-gray-700/40 px-2.5 py-1 text-xs font-medium text-gray-300">분석 대기</span>
+        )}
       </div>
 
       <div className="space-y-5 p-4">
@@ -162,11 +166,13 @@ function Xai_visualization({
             </div>
 
             <p className="mt-3 text-3xl font-bold text-white">
-              {confidenceScore}%
+              {confidenceScore != null
+               ? `${confidenceScore}%` : '-'}
             </p>
 
             <p className="mt-1 text-xm text-gray-400">
-              AI 판단 신뢰도
+              {confidenceScore != null
+                ? 'AI 판단 신뢰도' : '분석 결과 없음'}
             </p>
           </div>
 
@@ -180,11 +186,13 @@ function Xai_visualization({
             </div>
 
             <p className="mt-3 text-3xl font-bold text-white">
-              {uncertaintyScore}%
+              {uncertaintyScore != null
+                ? `${uncertaintyScore}%` : '-'}
             </p>
 
             <p className="mt-1 text-xm text-gray-400">
-              AI 판단 불확실성
+              {uncertaintyScore != null
+                ? '신뢰도 기반 보완값' : '분석 결과 없음'}
             </p>
           </div>
         </div>
