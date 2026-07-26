@@ -15,6 +15,13 @@ import Xai_visualization from '../Components/Xai_visualization'
 import Mace_risk from "../Components/Mace_risk"
 
 // ==========================================
+// [희욱 파트] 신규 컴포넌트 3종 Import
+// ==========================================
+import ImpressionTemplate from '../Components/ImpressionTemplate'
+import FindingChecklist from '../Components/FindingChecklist'
+import EmrConfirmPanel from '../Components/EmrConfirmPanel'
+
+// ==========================================
 // 1. PatientManagement 컴포넌트
 // ==========================================
 export function PatientManagement({ patients, errorMessage, onSelectPatient }) {
@@ -131,7 +138,7 @@ export default function Dashboard({
   const [currentMenu, setCurrentMenu] = useState('dashboard')
   const [selectedPatient, setSelectedPatient] = useState(null)
 
-  // XAI 표시 모드: Bounding Box 또는 Heatmap
+  // XAI 시각화 상태 
   const [overlayMode, setOverlayMode] = useState('boundingBox')
   const [heatmapOpacity, setHeatmapOpacity] = useState(50)
   const [confidenceThreshold, setConfidenceThreshold] = useState(50)
@@ -154,6 +161,7 @@ export default function Dashboard({
   const [totalFrames] = useState(300)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
+  const [heatmapToggle, setHeatmapToggle] = useState(true)
   const [selectedSeries, setSelectedSeries] = useState('1')
 
   // AI진단 (predict)
@@ -177,6 +185,16 @@ export default function Dashboard({
   const [isDragging, setIsDragging] = useState(false)
   const dragStartRef = useRef({ mouseX: 0, mouseY: 0, imageX: 0, imageY: 0 })
   const viewerContainerRef = useRef(null)
+
+  // ==========================================
+  // [희욱 추가] Llama-3 XAI 및 Interactive BBox / Canvas 주석 상태
+  // ==========================================
+  const [selectedVessels, setSelectedVessels] = useState([])
+  const [pciNeeded, setPciNeeded] = useState(null)
+  const [aiImpressionText, setAiImpressionText] = useState('')
+  const [canvasDrawMode, setCanvasDrawMode] = useState('none') // 'bbox' | 'text' | 'none'
+  const [canvasAnnotations, setCanvasAnnotations] = useState([]) // BBox 및 Text 개체 배열
+  const [currentBBox, setCurrentBBox] = useState(null) // 현재 드래그 중인 BBox
 
   // 자동 재생 타이머 (프레임 연동)
   useEffect(() => {
@@ -428,8 +446,29 @@ useEffect(() => {
     }
 }, [overlayMode, confidenceThreshold, isViewerImageLoaded, aiResult, xaiData.boundingBoxes,])
 
-  // 뷰어 마우스 드래그 팬(Pan) 핸들러
+  // Canvas 상의 인터랙티브 마우스 드래그 (BBox 생성 & Text 생성 & Pan)
   const handleMouseDown = (e) => {
+    const rect = viewerContainerRef.current.getBoundingClientRect()
+    const startX = e.clientX - rect.left
+    const startY = e.clientY - rect.top
+
+    if (canvasDrawMode === 'bbox') {
+      setIsDragging(true)
+      setCurrentBBox({ startX, startY, width: 0, height: 0, frame: currentFrame })
+      return
+    }
+
+    if (canvasDrawMode === 'text') {
+      const textToDraw = prompt('Canvas에 표시할 임상 주석을 입력하세요:', 'LAD 75% 협착')
+      if (textToDraw) {
+        setCanvasAnnotations(prev => [
+          ...prev, 
+          { id: Date.now(), type: 'text', text: textToDraw, x: startX, y: startY, frame: currentFrame }
+        ])
+      }
+      return
+    }
+
     setIsDragging(true)
     dragStartRef.current = {
       mouseX: e.clientX,
@@ -441,6 +480,20 @@ useEffect(() => {
 
   const handleMouseMove = (e) => {
     if (!isDragging) return
+
+    const rect = viewerContainerRef.current.getBoundingClientRect()
+    const currentX = e.clientX - rect.left
+    const currentY = e.clientY - rect.top
+
+    if (canvasDrawMode === 'bbox' && currentBBox) {
+      setCurrentBBox({
+        ...currentBBox,
+        width: currentX - currentBBox.startX,
+        height: currentY - currentBBox.startY
+      })
+      return
+    }
+
     const dx = e.clientX - dragStartRef.current.mouseX
     const dy = e.clientY - dragStartRef.current.mouseY
     setPosition({
@@ -450,6 +503,15 @@ useEffect(() => {
   }
 
   const handleMouseUp = () => {
+    if (canvasDrawMode === 'bbox' && currentBBox) {
+      if (Math.abs(currentBBox.width) > 10 && Math.abs(currentBBox.height) > 10) {
+        setCanvasAnnotations(prev => [
+          ...prev,
+          { id: Date.now(), type: 'bbox', ...currentBBox }
+        ])
+      }
+      setCurrentBBox(null)
+    }
     setIsDragging(false)
   }
 
@@ -545,75 +607,74 @@ useEffect(() => {
     }
   }
 
-//AI predict 관련
-const handleAiPredict = async () => {
-  if (!aiFile) {
-    alert('분석할 이미지를 선택해주세요.')
-    return
-  }
-  const access = localStorage.getItem('access')
-  if (!access) {
-    alert('로그인 토큰이 없습니다. 다시 로그인해 주세요.')
-    return
-  }
-  setAiLoading(true)
-  setAiError('')
-  setAiResult(null)
-  try {
-    const formData = new FormData()
-    formData.append('file', aiFile)
-    const response = await fetch('http://34.80.83.7:8000/api/ai/predict/', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${access}`,
-      },
-      body: formData,
-    })
-    if (response.status === 401) {
-      setAiError('로그인이 만료되었습니다. 다시 로그인해 주세요.')
+  //AI predict 관련
+  const handleAiPredict = async () => {
+    if (!aiFile) {
+      alert('분석할 이미지를 선택해주세요.')
       return
     }
-    if (!response.ok) {
-      throw new Error('AI 분석 요청 실패')
+    const access = localStorage.getItem('access')
+    if (!access) {
+      alert('로그인 토큰이 없습니다. 다시 로그인해 주세요.')
+      return
     }
-    const data = await response.json()
-    console.log('AI 응답 전체:', data)
-    setAiResult(data)
-  } catch (error) {
-    console.error(error)
-    setAiError('AI 분석에 실패했습니다.')
-  } finally {
-    setAiLoading(false)
+    setAiLoading(true)
+    setAiError('')
+    setAiResult(null)
+    try {
+      const formData = new FormData()
+      formData.append('file', aiFile)
+      const response = await fetch('http://34.80.83.7:8000/api/ai/predict/', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${access}`,
+        },
+        body: formData,
+      })
+      if (response.status === 401) {
+        setAiError('로그인이 만료되었습니다. 다시 로그인해 주세요.')
+        return
+      }
+      if (!response.ok) {
+        throw new Error('AI 분석 요청 실패')
+      }
+      const data = await response.json()
+      console.log('AI 응답 전체:', data)
+      setAiResult(data)
+    } catch (error) {
+      console.error(error)
+      setAiError('AI 분석에 실패했습니다.')
+    } finally {
+      setAiLoading(false)
+    }
   }
-}
-
 
   return (
     <div className="flex flex-col h-screen text-gray-100 overflow-hidden" style={{ backgroundColor: '#060B18' }}>
       {/* 상단 헤더 */}
-        <header className="flex items-center justify-between px-6 h-14 border-b border-blue-800/40 bg-gray-900/70 backdrop-blur-md shrink-0 shadow-lg z-20">
-          <div className="flex items-center space-x-4">
-            {/* 모바일용 사이드바 토글 버튼 */}
-            <button 
-              onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-              className="md:hidden p-1.5 text-gray-300 hover:text-white rounded bg-gray-800 border border-blue-800/50"
-            >
-              {isMobileSidebarOpen ? <X size={18} /> : <Menu size={18} />}
-            </button>
-            <div className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded shadow-lg shadow-blue-600/30">LOGO</div>
-            <h1 className="text-white font-bold text-sm md:text-lg tracking-wide truncate">혈관조영술 AI 진단 시스템</h1>
-          </div>
-          <div className="flex items-center space-x-4">
-            <span className="hidden sm:inline text-sm text-gray-200 hover:text-white cursor-pointer">알림</span>
-            <span className="text-xs md:text-sm font-medium text-blue-200">{displayName} (의료진)</span>
-            <button onClick={onLogout} className="text-xs md:text-sm text-red-400 hover:text-red-300 font-medium">로그아웃</button>
-          </div>
-        </header>
+      <header className="flex items-center justify-between px-6 h-14 border-b border-blue-800/40 bg-gray-900/70 backdrop-blur-md shrink-0 shadow-lg z-20">
+        <div className="flex items-center space-x-4">
+          {/* 모바일용 사이드바 토글 버튼 */}
+          <button 
+            onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+            className="md:hidden p-1.5 text-gray-300 hover:text-white rounded bg-gray-800 border border-blue-800/50"
+          >
+            {isMobileSidebarOpen ? <X size={18} /> : <Menu size={18} />}
+          </button>
+          <div className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded shadow-lg shadow-blue-600/30">LOGO</div>
+          <h1 className="text-white font-bold text-sm md:text-lg tracking-wide truncate">혈관조영술 AI 진단 시스템</h1>
+        </div>
+        <div className="flex items-center space-x-4">
+          <span className="hidden sm:inline text-sm text-gray-200 hover:text-white cursor-pointer">알림</span>
+          <span className="text-xs md:text-sm font-medium text-blue-200">{displayName} (의료진)</span>
+          <button onClick={onLogout} className="text-xs md:text-sm text-red-400 hover:text-red-300 font-medium">로그아웃</button>
+        </div>
+      </header>
 
       {/* 메인 레이아웃 */}
       <div className="flex flex-1 overflow-hidden relative">
         
-        {/* 모바일 백드롭 오버레이 (사이드바 열렸을 때 배경 어둡게 처리) */}
+        {/* 모바일 백드롭 오버레이 */}
         {isMobileSidebarOpen && (
           <div 
             onClick={() => setIsMobileSidebarOpen(false)}
@@ -621,7 +682,7 @@ const handleAiPredict = async () => {
           />
         )}
 
-        {/* 사이드바 (반응형: 모바일선 absolute 슬라이드, md 이상선 flex 고정 w-60) */}
+        {/* 사이드바 */}
         <aside className={`
           absolute md:relative inset-y-0 left-0 z-40 
           w-60 border-r border-blue-800/40 bg-gray-900/95 md:bg-gray-900/60 backdrop-blur-md 
@@ -699,7 +760,7 @@ const handleAiPredict = async () => {
             </nav>
           </div>
 
-          {/* 사이드바 하단 북마크 요약 리스트 */}
+          {/* 사이드바 하단 북마크 요약 */}
           <div className="mt-6 border-t border-blue-800/40 pt-3">
             <div className="flex items-center gap-1.5 mb-2">
               <Bookmark size={14} className="text-blue-400" />
@@ -757,7 +818,7 @@ const handleAiPredict = async () => {
               <div className="lg:col-span-2 flex flex-col space-y-4">
                 
                 {/* 뷰어 */}
-                <div ref={viewerContainerRef} className="flex-1 min-h-[380px] rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md flex flex-col overflow-hidden shadow-2xl">
+                <div ref={viewerContainerRef} className="flex-1 min-h-[380px] rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md flex flex-col overflow-hidden shadow-2xl relative">
                   <div className="flex items-center justify-between border-b border-blue-800/40 px-4 py-2.5 bg-blue-950/40">
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-semibold text-white">영상 뷰어</span>
@@ -823,9 +884,7 @@ const handleAiPredict = async () => {
                       style={{
                         transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
                         transformOrigin: 'center center',
-                        transition: isDragging
-                          ? 'none'
-                          : 'transform 0.1s ease-out',
+                        transition: isDragging ? 'none' : 'transform 0.1s ease-out',
                       }}
                     >
                       <img
@@ -855,6 +914,51 @@ const handleAiPredict = async () => {
                         aria-label="AI Bounding Box"
                       />
                     </div>
+
+                    {/* ========================================== */}
+                    {/* [희욱 파트] Canvas 상의 인터랙티브 BBox & Text 오버레이 */}
+                    {/* ========================================== */}
+                    {canvasAnnotations
+                      .filter(item => item.frame === currentFrame)
+                      .map(item => (
+                        item.type === 'bbox' ? (
+                          <div
+                            key={item.id}
+                            style={{
+                              left: item.startX,
+                              top: item.startY,
+                              width: item.width,
+                              height: item.height,
+                            }}
+                            className="absolute border-2 border-cyan-400 bg-cyan-500/20 z-30 pointer-events-none shadow-lg"
+                          >
+                            <span className="absolute -top-5 left-0 bg-cyan-500 text-black text-[10px] font-bold px-1 rounded">
+                              BBox Area
+                            </span>
+                          </div>
+                        ) : (
+                          <div
+                            key={item.id}
+                            style={{ left: item.x, top: item.y }}
+                            className="absolute z-30 transform -translate-x-1/2 -translate-y-1/2 bg-amber-500/90 text-black px-2 py-0.5 rounded text-xs font-bold shadow-lg border border-amber-300 pointer-events-none animate-bounce"
+                          >
+                            ✍️ {item.text}
+                          </div>
+                        )
+                      ))}
+
+                    {/* 실시간 드래그 중인 BBox 가이드 상자 */}
+                    {currentBBox && (
+                      <div
+                        style={{
+                          left: currentBBox.startX,
+                          top: currentBBox.startY,
+                          width: currentBBox.width,
+                          height: currentBBox.height,
+                        }}
+                        className="absolute border-2 border-dashed border-red-500 bg-red-500/20 z-30 pointer-events-none"
+                      />
+                    )}
 
                     <button onClick={(e) => { e.stopPropagation(); setCurrentFrame(prev => Math.max(prev - 1, 1)); }} className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-gray-900/80 border border-blue-800/50 p-2 text-white hover:bg-gray-900 z-20 shadow-lg">
                       <ChevronLeft size={20} />
@@ -1048,6 +1152,8 @@ const handleAiPredict = async () => {
                       )
                     )}
                   </div>
+                </div>
+
                 <div className="mt-4">
                   <Xai_visualization 
                       overlayMode={overlayMode}
@@ -1071,8 +1177,37 @@ const handleAiPredict = async () => {
                 <div className="mt-4">
                   <Mace_risk />
                 </div>
+
+                {/* ========================================== */}
+                {/* [희욱 파트 순서 변경] 1. 판독 체크리스트 ➔ 2. 임상 소견 ➔ 3. EMR 확정 패널 */}
+                {/* ========================================== */}
+                
+                {/* 1. [첫 번째] 판독 체크리스트 (클릭 시 Llama-3 소견 자동 생성) */}
+                <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-4 shadow-2xl">
+                  <FindingChecklist 
+                    selectedVessels={selectedVessels}
+                    setSelectedVessels={setSelectedVessels}
+                    pciNeeded={pciNeeded}
+                    setPciNeeded={setPciNeeded}
+                    onGenerateImpression={(text) => setAiImpressionText(text)}
+                    onCanvasDrawMode={(mode) => setCanvasDrawMode(mode)}
+                  />
+                </div>
+
+                {/* 2. [두 번째] 임상 소견 템플릿 (Llama-3 소견 수신 및 편집) */}
+                <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-4 shadow-2xl">
+                  <ImpressionTemplate 
+                    externalImpression={aiImpressionText}
+                    onImpressionChange={(val) => setAiImpressionText(val)}
+                  />
+                </div>
+
+                {/* 3. [세 번째] EMR 최종 확정 패널 */}
+                <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-4 shadow-2xl">
+                  <EmrConfirmPanel />
+                </div>
+
               </div>
-            </div>
             </main>
           )}
         </div>
