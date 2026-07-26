@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import angioImage from '../assets/angio_sample.png'
-import { Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from 'lucide-react'
+import { Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Maximize2, Minimize2, FolderSearch } from 'lucide-react'
 
 function Main_viewer({
     patientData,
@@ -27,7 +27,6 @@ function Main_viewer({
 
     const totalFrames = 250
 
-    // 자동 재생
     const mockBoundingBoxes = [{
         id: 1,
         x: 100,
@@ -115,7 +114,6 @@ function Main_viewer({
                 0
             )
 
-            // 이전에 그린 내용을 전체 삭제
             context.clearRect(
                 0,
                 0,
@@ -137,65 +135,65 @@ function Main_viewer({
                     (box) =>
                         box.confidence * 100 >= confidenceThreshold
                 )
-            .forEach((box) => {
-                const boxX = box.x * scaleX
-                const boxY = box.y * scaleY
-                const boxWidth = box.width * scaleX
-                const boxHeight = box.height * scaleY
+                .forEach((box) => {
+                    const boxX = box.x * scaleX
+                    const boxY = box.y * scaleY
+                    const boxWidth = box.width * scaleX
+                    const boxHeight = box.height * scaleY
 
-                const labelText = `${box.label} ${Math.round(
-                    box.confidence * 100
-                )}%`
+                    const labelText = `${box.label} ${Math.round(
+                        box.confidence * 100
+                    )}%`
 
-            context.strokeStyle = '#ef4444'
-            context.lineWidth = 5
+                context.strokeStyle = '#ef4444'
+                context.lineWidth = 5
 
-            context.strokeRect(
-                boxX,
-                boxY,
-                boxWidth,
-                boxHeight
-            )
+                context.strokeRect(
+                    boxX,
+                    boxY,
+                    boxWidth,
+                    boxHeight
+                )
 
-            context.font = 'bold 18px sans-serif'
+                context.font = 'bold 18px sans-serif'
 
-            const labelWidth =
-                context.measureText(labelText).width + 12
+                const labelWidth =
+                    context.measureText(labelText).width + 12
 
-            const labelHeight = 22
+                const labelHeight = 22
 
-            context.fillStyle = '#ef4444'
+                context.fillStyle = '#ef4444'
 
-            context.fillRect(
-                boxX,
-                Math.max(boxY - labelHeight, 0),
-                labelWidth,
-                labelHeight
-            )
+                context.fillRect(
+                    boxX,
+                    Math.max(boxY - labelHeight, 0),
+                    labelWidth,
+                    labelHeight
+                )
 
-            context.fillStyle = '#ffffff'
+                context.fillStyle = '#ffffff'
 
-            context.fillText(
-                labelText,
-                boxX + 6,
-                Math.max(boxY - 7, 15)
-            )
-        })
-    }
+                context.fillText(
+                    labelText,
+                    boxX + 6,
+                    Math.max(boxY - 7, 15)
+                )
+            })
+        }
 
-    drawBoundingBoxes()
+        drawBoundingBoxes()
 
-    window.addEventListener(
-        'resize',
-        drawBoundingBoxes
-    )
-
-    return () => {
-        window.removeEventListener(
-        'resize',
-        drawBoundingBoxes
+        window.addEventListener(
+            'resize',
+            drawBoundingBoxes
         )
-    }
+
+        return () => {
+            window.removeEventListener(
+            'resize',
+            drawBoundingBoxes
+            )
+        }
     }, [
         overlayMode,
         confidenceThreshold,
@@ -292,11 +290,19 @@ function Main_viewer({
     const handleMouseUp = () => setIsDragging(false)
     const handleMouseLeave = () => setIsDragging(false)
 
-    // 선택된 데이터가 없을 경우 처리
+    // 선택된 데이터가 없을 경우 처리 (초기 로그인 홈 화면 개선)
     if (!patientData) {
         return (
-            <section className="flex h-full min-h-[500px] flex-col items-center justify-center overflow-hidden rounded-lg border border-gray-800 bg-gray-900 text-gray-400">
-                <p className="text-sm">좌측 목록에서 환자나 북마크를 선택해주세요.</p>
+            <section className="flex h-full min-h-[500px] flex-col items-center justify-center rounded-lg border border-gray-800 bg-gray-900 text-gray-400">
+                <div className="flex flex-col items-center gap-3 p-6 text-center">
+                    <div className="rounded-full bg-gray-800 p-4 text-blue-500">
+                        <FolderSearch size={36} />
+                    </div>
+                    <h3 className="text-lg font-medium text-white">선택된 환자 영상이 없습니다</h3>
+                    <p className="text-sm text-gray-400">
+                        좌측 메뉴의 환자 목록이나 빠른 검색을 통해 진단할 환자를 선택해 주세요.
+                    </p>
+                </div>
             </section>
         );
     }
