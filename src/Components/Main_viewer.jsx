@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import angioImage from '../assets/angio_sample.png'
 import { Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from 'lucide-react'
 
-function Main_viewer() {
+// patientData prop을 받아오도록 수정 (환자 또는 북마크 정보)
+function Main_viewer({ patientData }) {
     const [currentFrame, setCurrentFrame] = useState(125)
     const [isPlaying, setIsPlaying] = useState(false)
     const [selectedSeries, setSelectedSeries] = useState('1')
@@ -133,6 +134,15 @@ function Main_viewer() {
     const handleMouseUp = () => setIsDragging(false)
     const handleMouseLeave = () => setIsDragging(false)
 
+    // 선택된 데이터가 없을 경우 처리
+    if (!patientData) {
+        return (
+            <section className="flex h-full min-h-[500px] flex-col items-center justify-center overflow-hidden rounded-lg border border-gray-800 bg-gray-900 text-gray-400">
+                <p className="text-sm">좌측 목록에서 환자나 북마크를 선택해주세요.</p>
+            </section>
+        );
+    }
+
     return (
         <section
             ref={viewerRef}
@@ -141,7 +151,9 @@ function Main_viewer() {
             {/* 상단 툴바 */}
             <div className="flex min-h-14 items-center justify-between border-b border-gray-800 px-4 py-3">
                 <div className="flex items-center gap-4">
-                    <h2 className="text-base font-semibold text-white">영상 뷰어</h2>
+                    <h2 className="text-base font-semibold text-white">
+                        {patientData.name ? `${patientData.name} 영상 뷰어` : patientData.title}
+                    </h2>
                     <select
                         value={selectedSeries}
                         onChange={(e) => setSelectedSeries(e.target.value)}
@@ -194,10 +206,10 @@ function Main_viewer() {
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseLeave}
             >
-                {/* 좌측 상단 정보 */}
+                {/* 좌측 상단 정보 (동적 맵핑) */}
                 <div className="absolute left-4 top-4 z-10 space-y-1 text-xs text-gray-200 pointer-events-none">
-                    <p>Patient ID : 00012345</p>
-                    <p>Study Date : 2026-07-25</p>
+                    <p>Patient ID : {patientData.patientId || patientData.id || '00012345'}</p>
+                    <p>Study Date : {patientData.date || '2026-07-25'}</p>
                     <p>Series : {selectedSeries}</p>
                 </div>
 
@@ -207,19 +219,28 @@ function Main_viewer() {
                     <p>LAO 45° / CRAN 20°</p>
                 </div>
 
-                {/* 이미지 본문 */}
+                {/* 이미지 본문 (API나 데이터에서 전달된 image/video URL 연동) */}
                 <div className="flex h-full w-full items-center justify-center">
-                    <img
-                        src={angioImage}
-                        alt="혈관조영술"
-                        className="max-h-full max-w-full object-contain"
-                        style={{
-                            transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-                            transformOrigin: 'center center',
-                            transition: isDragging ? 'none' : 'transform 0.1s ease-out',
-                        }}
-                        draggable={false}
-                    />
+                    {patientData.mediaType === 'video' ? (
+                        <iframe 
+                            src={patientData.mediaUrl} 
+                            title={patientData.title || '촬영 영상'}
+                            className="w-full h-full border-0"
+                            allowFullScreen
+                        />
+                    ) : (
+                        <img
+                            src={patientData.imageUrl || patientData.url || angioImage}
+                            alt="혈관조영술"
+                            className="max-h-full max-w-full object-contain"
+                            style={{
+                                transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                                transformOrigin: 'center center',
+                                transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+                            }}
+                            draggable={false}
+                        />
+                    )}
                 </div>
 
                 {/* 좌우 프레임 이동 버튼 */}
@@ -242,7 +263,7 @@ function Main_viewer() {
 
                 {/* 좌측 하단 정보 */}
                 <div className="absolute bottom-4 left-4 text-xs text-gray-200 pointer-events-none">
-                    <p>RCA</p>
+                    <p>{patientData.vessel || 'RCA'}</p>
                     <p>W: 4095 / L: 2048</p>
                 </div>
             </div>
