@@ -140,6 +140,13 @@ export default function Dashboard({
   const [heatmapToggle, setHeatmapToggle] = useState(true)
   const [selectedSeries, setSelectedSeries] = useState('1')
 
+  // AI진단 (predict)
+  const [aiFile, setAiFile] = useState(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiResult, setAiResult] = useState(null)
+  const [aiError, setAiError] = useState('')
+  const [isAiDragOver, setIsAiDragOver] = useState(false)
+
   // 뷰어 인터랙션 상태 (줌인, 줌아웃, 팬, 전체화면)
   const [scale, setScale] = useState(1)
   const [position, setPosition] = useState({ x: 0, y: 0 })
@@ -278,6 +285,48 @@ const handleSidebarSearchKeyDown = async (e) => {
     }
   }
 }
+
+//AI predict 관련
+const handleAiPredict = async () => {
+  if (!aiFile) {
+    alert('분석할 이미지를 선택해주세요.')
+    return
+  }
+  const access = localStorage.getItem('access')
+  if (!access) {
+    alert('로그인 토큰이 없습니다. 다시 로그인해 주세요.')
+    return
+  }
+  setAiLoading(true)
+  setAiError('')
+  setAiResult(null)
+  try {
+    const formData = new FormData()
+    formData.append('file', aiFile)
+    const response = await fetch('http://35.234.39.234:8000/api/ai/predict/', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${access}`,
+      },
+      body: formData,
+    })
+    if (response.status === 401) {
+      setAiError('로그인이 만료되었습니다. 다시 로그인해 주세요.')
+      return
+    }
+    if (!response.ok) {
+      throw new Error('AI 분석 요청 실패')
+    }
+    const data = await response.json()
+    setAiResult(data)
+  } catch (error) {
+    console.error(error)
+    setAiError('AI 분석에 실패했습니다.')
+  } finally {
+    setAiLoading(false)
+  }
+}
+
 
   return (
     <div className="flex flex-col h-screen bg-gray-950 text-gray-100 overflow-hidden">
@@ -587,29 +636,114 @@ const handleSidebarSearchKeyDown = async (e) => {
               {/* 우측 패널 영역 */}
               <div className="flex flex-col space-y-4">
                 <div className="bg-gray-900 rounded-lg border border-gray-800 p-4 flex flex-col">
-                  {/* 북마크 저장 버튼 제거 완료 */}
                   <div className="border-b border-gray-800 pb-3 mb-3">
                     <h2 className="font-semibold text-sm text-white">AI 결과 패널</h2>
                   </div>
                   <div className="space-y-3 text-xs">
-                    <div className="rounded border border-gray-800 bg-gray-800/40 p-3">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-gray-400">진단 요약</span>
-                        <span className="rounded bg-red-950/80 px-2 py-0.5 text-red-400 border border-red-800 font-medium">신뢰도 87%</span>
-                      </div>
-                      <p className="text-sm font-bold text-white">협착 의심</p>
+                    <div
+                      className={`rounded border border-dashed p-3 space-y-2 ${
+                        isAiDragOver
+                          ? 'border-blue-500 bg-blue-950/30'
+                          : 'border-gray-700 bg-gray-800/40'
+                      }`}
+                      onDragEnter={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setIsAiDragOver(true)
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setIsAiDragOver(true)
+                      }}
+                      onDragLeave={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setIsAiDragOver(false)
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setIsAiDragOver(false)
+                        const file = e.dataTransfer.files?.[0]
+                        if (!file) return
+                        if (!file.type.startsWith('image/')) {
+                          alert('이미지 파일만 업로드할 수 있습니다.')
+                          return
+                        }
+                        setAiFile(file)
+                        setAiResult(null)
+                        setAiError('')
+                      }}
+                    >
+                      <label className="block text-gray-400">분석 이미지</label>
+                      <p className="text-[11px] text-gray-500">
+                        여기로 이미지를 드래그하거나, 아래에서 파일을 선택하세요.
+                      </p>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          setAiFile(e.target.files?.[0] || null)
+                          setAiResult(null)
+                          setAiError('')
+                        }}
+                        className="block w-full text-xs text-gray-300 file:mr-3 file:rounded file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAiPredict}
+                        disabled={aiLoading || !aiFile}
+                        className="w-full rounded bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50"
+                      >
+                        {aiLoading ? '분석 중...' : 'AI 분석 실행'}
+                      </button>
+                      {aiFile && (
+                        <p className="text-gray-500 truncate">선택: {aiFile.name}</p>
+                      )}
                     </div>
-                    <div className="rounded border border-gray-800 bg-gray-800/40 p-3">
-                      <span className="text-gray-400 block mb-1">병변 위치</span>
-                      <p className="font-medium text-gray-200">RCA 중간 부위</p>
-                    </div>
+                    {aiError && (
+                      <p className="text-red-400 font-medium">{aiError}</p>
+                    )}
+                    {aiResult ? (
+                      <>
+                        <div className="rounded border border-gray-800 bg-gray-800/40 p-3">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-gray-400">진단 요약</span>
+                            <span className="rounded bg-red-950/80 px-2 py-0.5 text-red-400 border border-red-800 font-medium">
+                              신뢰도 {((aiResult.confidence || 0) * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                          <p className="text-sm font-bold text-white">
+                            {aiResult.predicted_label === 'Stenosis' ? '협착 의심' : '정상'}
+                          </p>
+                        </div>
+                        <div className="rounded border border-gray-800 bg-gray-800/40 p-3 space-y-1">
+                          <span className="text-gray-400 block mb-1">확률</span>
+                          <p className="text-gray-200">
+                            Normal: {((aiResult.probabilities?.normal || 0) * 100).toFixed(1)}%
+                          </p>
+                          <p className="text-gray-200">
+                            Stenosis: {((aiResult.probabilities?.stenosis || 0) * 100).toFixed(1)}%
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      !aiLoading && (
+                        <p className="text-gray-500">이미지를 업로드한 뒤 분석을 실행하세요.</p>
+                      )
+                    )}
                   </div>
                 </div>
-
                 <div className="bg-gray-900 rounded-lg border border-gray-800 p-4 shrink-0">
                   <div className="flex items-center justify-between mb-2">
                     <h2 className="font-semibold text-sm text-white">히트맵 / 박스 오버레이</h2>
-                    <input type="checkbox" checked={heatmapToggle} onChange={() => setHeatmapToggle(!heatmapToggle)} className="cursor-pointer" />
+                    <input
+                      type="checkbox"
+                      checked={heatmapToggle}
+                      onChange={() => setHeatmapToggle(!heatmapToggle)}
+                      className="cursor-pointer"
+                    />
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-center text-xs text-gray-400">
                     <div className="h-20 rounded border border-gray-800 bg-black flex items-center justify-center overflow-hidden relative">
