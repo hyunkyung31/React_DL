@@ -121,9 +121,8 @@ function Main_viewer({
                 imageHeight
             )
 
-            const shouldShowBoundingBox =
-                overlayMode === 'boundingBox' ||
-                overlayMode === 'both'
+            const shouldShowBoundingBox = overlayMode === 'boundingBox'
+            const shouldShowHeatmap = overlayMode === 'heatmap'
 
             if (!shouldShowBoundingBox) return
 
