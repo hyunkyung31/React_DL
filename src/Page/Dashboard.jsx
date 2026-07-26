@@ -138,6 +138,7 @@ export default function Dashboard({
 
   const viewerImageRef = useRef(null)
   const heatmapCanvasRef = useRef(null)
+  const boundingBoxCanvasRef = useRef(null)
   
   // 모바일 반응형 사이드바 토글 상태
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
@@ -290,6 +291,115 @@ useEffect(() => {
 }, [
   overlayMode,
   heatmapOpacity,
+  isViewerImageLoaded,
+])
+
+  // Bounding Box 렌더링
+  useEffect(() => {
+    const image = viewerImageRef.current
+    const canvas = boundingBoxCanvasRef.current
+
+    if (!image || !canvas || !isViewerImageLoaded) return
+
+    const drawBoundingBoxes = () => {
+      const imageWidth = image.clientWidth
+      const imageHeight = image.clientHeight
+
+      if (imageWidth === 0 || imageHeight === 0) return
+
+      const pixelRatio = window.devicePixelRatio || 1
+
+      canvas.width = imageWidth * pixelRatio
+      canvas.height = imageHeight * pixelRatio
+      canvas.style.width = `${imageWidth}px`
+      canvas.style.height = `${imageHeight}px`
+
+      const context = canvas.getContext('2d')
+
+      if (!context) return
+
+      context.setTransform(
+        pixelRatio,
+        0,
+        0,
+        pixelRatio,
+        0,
+        0
+      )
+
+      context.clearRect(
+        0,
+        0,
+        imageWidth,
+        imageHeight
+      )
+
+    // Bounding Box 모드에서만 표시
+    if (overlayMode !== 'boundingBox') return
+
+    const mockBoundingBoxes = [
+      {
+        id: 1,
+        x: 120,
+        y: 90,
+        width: 150,
+        height: 120,
+        label: 'Stenosis',
+        confidence: 0.94,
+      },
+    ]
+
+    const scaleX = imageWidth / image.naturalWidth
+    const scaleY = imageHeight / image.naturalHeight
+
+    mockBoundingBoxes
+      .filter(
+        (box) =>
+          box.confidence * 100 >= confidenceThreshold
+      )
+      .forEach((box) => {
+        const boxX = box.x * scaleX
+        const boxY = box.y * scaleY
+        const boxWidth = box.width * scaleX
+        const boxHeight = box.height * scaleY
+
+        const labelText = `${box.label} ${Math.round(box.confidence * 100)}%`
+
+        context.strokeStyle = '#ef4444'
+        context.lineWidth = 4
+
+        context.strokeRect(
+          boxX,
+          boxY,
+          boxWidth,
+          boxHeight
+        )
+
+        context.font = 'bold 15px sans-serif'
+
+        const labelPadding = 6
+        const labelHeight = 24
+        const labelWidth = context.measureText(labelText).width + labelPadding * 2
+        const labelY = Math.max(boxY - labelHeight, 0)
+
+        context.fillStyle = '#ef4444'
+        context.fillRect(boxX, labelY, labelWidth, labelHeight)
+
+        context.fillStyle = '#ffffff'
+        context.fillText(labelText, boxX + labelPadding, labelY + 17)
+      })
+    }
+
+    drawBoundingBoxes()
+
+    window.addEventListener('resize', drawBoundingBoxes)
+
+    return () => {
+      window.removeEventListener('resize', drawBoundingBoxes)
+    }
+}, [
+  overlayMode,
+  confidenceThreshold,
   isViewerImageLoaded,
 ])
 
@@ -705,6 +815,11 @@ const handleAiPredict = async () => {
                         className="pointer-events-none absolute left-0 top-0 h-full w-full"
                         aria-label="임시 AI Heatmap"
                       />
+                      <canvas
+                        ref={boundingBoxCanvasRef}
+                        className="pointer-events-none absolute left-0 top-0 h-full w-full"
+                        aria-label="AI Bounding Box"
+                      />
                     </div>
 
                     <button onClick={(e) => { e.stopPropagation(); setCurrentFrame(prev => Math.max(prev - 1, 1)); }} className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-gray-900/80 border border-blue-800/50 p-2 text-white hover:bg-gray-900 z-20 shadow-lg">
@@ -893,7 +1008,7 @@ const handleAiPredict = async () => {
                       )
                     )}
                   </div>
-                <div>
+                <div className="mt-4">
                   <Xai_visualization 
                       overlayMode={overlayMode}
                       setOverlayMode={setOverlayMode}

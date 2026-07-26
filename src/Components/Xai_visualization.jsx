@@ -36,7 +36,7 @@ function Xai_visualization({
       {/* 제목 영역 */}
       <div className="flex items-center justify-between border-b border-gray-800 px-4 py-3">
         <div>
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-white">
             <BrainCircuit size={18} />
             XAI 시각화
           </h2>
@@ -54,7 +54,7 @@ function Xai_visualization({
       <div className="space-y-5 p-4">
         {/* 시각화 모드 */}
         <div>
-          <p className="mb-2 text-xs font-medium text-gray-300">
+          <p className="mb-3 text-sm font-semibold text-gray-200">
             시각화 모드
           </p>
 
@@ -68,13 +68,13 @@ function Xai_visualization({
                   key={option.value}
                   type="button"
                   onClick={() => setOverlayMode(option.value)}
-                  className={`flex min-h-20 flex-col items-center justify-center gap-2 rounded-lg border px-2 py-3 text-xs transition-colors ${
+                  className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-lg border px-2 py-3 text-xm transition-colors ${
                     isSelected
                       ? 'border-blue-500 bg-blue-600 text-white'
                       : 'border-gray-700 bg-gray-800 text-gray-300 hover:border-gray-600 hover:bg-gray-700'
                   }`}
                 >
-                  <Icon size={20} />
+                  <Icon size={25} />
 
                   <span>{option.label}</span>
                 </button>
@@ -88,12 +88,12 @@ function Xai_visualization({
           <div className="mb-2 flex items-center justify-between">
             <label
               htmlFor="heatmapOpacity"
-              className="text-xs font-medium text-gray-300"
+              className="text-sm font-medium text-gray-300"
             >
               Heatmap 투명도
             </label>
 
-            <span className="text-xs font-semibold text-blue-300">
+            <span className="text-sm font-semibold text-blue-300">
               {heatmapOpacity}%
             </span>
           </div>
@@ -123,12 +123,12 @@ function Xai_visualization({
           <div className="mb-2 flex items-center justify-between">
             <label
               htmlFor="confidenceThreshold"
-              className="text-xs font-medium text-gray-300"
+              className="text-sm font-medium text-gray-300"
             >
               Confidence Threshold
             </label>
 
-            <span className="text-xs font-semibold text-blue-300">
+            <span className="text-sm font-semibold text-blue-300">
               {confidenceThreshold}%
             </span>
           </div>
@@ -156,16 +156,16 @@ function Xai_visualization({
             <div className="flex items-center gap-2 text-emerald-300">
               <ShieldCheck size={17} />
 
-              <span className="text-xs font-medium">
+              <span className="text-sm font-medium">
                 Confidence
               </span>
             </div>
 
-            <p className="mt-3 text-2xl font-bold text-white">
+            <p className="mt-3 text-3xl font-bold text-white">
               {confidenceScore}%
             </p>
 
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xm text-gray-400">
               AI 판단 신뢰도
             </p>
           </div>
@@ -174,16 +174,16 @@ function Xai_visualization({
             <div className="flex items-center gap-2 text-amber-300">
               <TriangleAlert size={17} />
 
-              <span className="text-xs font-medium">
+              <span className="text-sm font-medium">
                 Uncertainty
               </span>
             </div>
 
-            <p className="mt-3 text-2xl font-bold text-white">
+            <p className="mt-3 text-3xl font-bold text-white">
               {uncertaintyScore}%
             </p>
 
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xm text-gray-400">
               AI 판단 불확실성
             </p>
           </div>
