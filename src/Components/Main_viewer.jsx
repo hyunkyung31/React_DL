@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import angioImage from '../assets/angio_sample.png'
-import {Play, Pause, SkipBack,SkipForward, ChevronLeft, ChevronRight,} from 'lucide-react'
+import { Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from 'lucide-react'
 
 function Main_viewer() {
     const [currentFrame, setCurrentFrame] = useState(125)
@@ -10,56 +10,47 @@ function Main_viewer() {
     const [scale, setScale] = useState(1)
     const [isZoomMode, setIsZoomMode] = useState(false)
     const [isDragging, setIsDragging] = useState(false)
+    const [isFullscreen, setIsFullscreen] = useState(false)
 
-    const [position, setPosition] = useState({
-        x: 0,
-        y: 0,
-    })
-
-    const dragStartRef = useRef({
-        mouseX: 0,
-        mouseY: 0,
-        imageX: 0,
-        imageY: 0,
-    })
+    const [position, setPosition] = useState({ x: 0, y: 0 })
+    const dragStartRef = useRef({ mouseX: 0, mouseY: 0, imageX: 0, imageY: 0 })
+    const viewerRef = useRef(null)
 
     const totalFrames = 250
 
+    // 자동 재생
     useEffect(() => {
         if (!isPlaying) return
 
         const frameInterval = 1000 / (10 * playbackSpeed)
-
         const playTimer = setInterval(() => {
-            setCurrentFrame((previousFrame) => {
-                if (previousFrame >= totalFrames) {
+            setCurrentFrame((prev) => {
+                if (prev >= totalFrames) {
                     setIsPlaying(false)
                     return totalFrames
-            }
+                }
+                return prev + 1
+            })
+        }, frameInterval)
 
-            return previousFrame + 1
-        })
-    }, frameInterval)
-
-        return () => {
-            clearInterval(playTimer)
-        }
+        return () => clearInterval(playTimer)
     }, [isPlaying, playbackSpeed, totalFrames])
+
+    // 전체화면 상태 감지
+    useEffect(() => {
+        const handleFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement))
+        document.addEventListener('fullscreenchange', handleFullscreenChange)
+        return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }, [])
 
     const handlePreviousFrame = () => {
         setIsPlaying(false)
-
-        setCurrentFrame((previousFrame) =>
-            Math.max(previousFrame - 1, 1)
-        )
+        setCurrentFrame((prev) => Math.max(prev - 1, 1))
     }
 
     const handleNextFrame = () => {
         setIsPlaying(false)
-
-        setCurrentFrame((previousFrame) => {
-        return Math.min(previousFrame + 1, totalFrames)
-        })
+        setCurrentFrame((prev) => Math.min(prev + 1, totalFrames))
     }
 
     const handlePlay = () => {
@@ -67,336 +58,265 @@ function Main_viewer() {
             setCurrentFrame(1)
             setIsPlaying(true)
             return
+        }
+        setIsPlaying((prev) => !prev)
     }
 
-        setIsPlaying((previousState) => !previousState)
+    const handleFullscreen = async () => {
+        if (!viewerRef.current) return
+        try {
+            if (!document.fullscreenElement) {
+                await viewerRef.current.requestFullscreen()
+            } else {
+                await document.exitFullscreen()
+            }
+        } catch (error) {
+            console.error('전체화면 실행 오류:', error)
+        }
     }
 
     const handleReset = () => {
         setIsPlaying(false)
         setCurrentFrame(125)
         setPlaybackSpeed(1)
-
         setScale(1)
         setIsZoomMode(false)
         setIsDragging(false)
-        setPosition({
-            x: 0,
-            y: 0,
-        })
+        setPosition({ x: 0, y: 0 })
     }
 
     const handleZoomToggle = () => {
-        setIsZoomMode((previousState) => {
-            const nextState = !previousState
-
-            if (!nextState) {
+        setIsZoomMode((prev) => {
+            const next = !prev
+            if (!next) {
                 setScale(1)
-                setPosition({
-                    x: 0,
-                    y: 0,
-                })
+                setPosition({ x: 0, y: 0 })
                 setIsDragging(false)
             }
-
-            return nextState
+            return next
         })
     }
 
-    const handleWheelZoom = (event) => {
+    const handleWheelZoom = (e) => {
         if (!isZoomMode) return
+        e.preventDefault()
+        const zoomAmount = e.deltaY < 0 ? 0.2 : -0.2
 
-        event.preventDefault()
-
-        const zoomAmount = event.deltaY < 0 ? 0.2 : -0.2
-
-        setScale((previousScale) => {
-            const nextScale = Math.min(
-                Math.max(previousScale + zoomAmount, 1), 4
-            )
-
-            if (nextScale === 1) {
-                setPosition({
-                    x: 0,
-                    y: 0,
-                })
-            }
-
-            return nextScale
+        setScale((prev) => {
+            const next = Math.min(Math.max(prev + zoomAmount, 1), 4)
+            if (next === 1) setPosition({ x: 0, y: 0 })
+            return next
         })
     }
 
-    const handleMouseDown = (event) => {
+    const handleMouseDown = (e) => {
         if (!isZoomMode || scale <= 1) return
-
         setIsDragging(true)
-
         dragStartRef.current = {
-            mouseX: event.clientX,
-            mouseY: event.clientY,
+            mouseX: e.clientX,
+            mouseY: e.clientY,
             imageX: position.x,
             imageY: position.y,
         }
     }
 
-    const handleMouseMove = (event) => {
+    const handleMouseMove = (e) => {
         if (!isDragging) return
-
-        const moveX =
-            event.clientX - dragStartRef.current.mouseX
-
-        const moveY =
-            event.clientY - dragStartRef.current.mouseY
-
+        const moveX = e.clientX - dragStartRef.current.mouseX
+        const moveY = e.clientY - dragStartRef.current.mouseY
         setPosition({
             x: dragStartRef.current.imageX + moveX,
             y: dragStartRef.current.imageY + moveY,
         })
     }
 
-    const handleMouseUp = () => {
-        setIsDragging(false)
-    }
-
-    const handleMouseLeave = () => {
-        setIsDragging(false)
-    }
+    const handleMouseUp = () => setIsDragging(false)
+    const handleMouseLeave = () => setIsDragging(false)
 
     return (
-        <section className="flex h-full min-h-[500px] flex-col overflow-hidden rounded-lg border border-gray-800 bg-gray-900">
-        {/* 상단 영상 뷰어 도구 모음 */}
-        <div className="flex min-h-14 items-center justify-between gap-4 border-b border-gray-800 px-4 py-3">
-            <div className="flex items-center gap-4">
-            <h2 className="text-base font-semibold text-white">
-                영상 뷰어
-            </h2>
+        <section
+            ref={viewerRef}
+            className="flex h-full min-h-[500px] flex-col overflow-hidden rounded-lg border border-gray-800 bg-gray-900"
+        >
+            {/* 상단 툴바 */}
+            <div className="flex min-h-14 items-center justify-between border-b border-gray-800 px-4 py-3">
+                <div className="flex items-center gap-4">
+                    <h2 className="text-base font-semibold text-white">영상 뷰어</h2>
+                    <select
+                        value={selectedSeries}
+                        onChange={(e) => setSelectedSeries(e.target.value)}
+                        className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-100 outline-none focus:border-blue-500"
+                    >
+                        <option value="1">시리즈 1</option>
+                        <option value="2">시리즈 2</option>
+                        <option value="3">시리즈 3</option>
+                    </select>
+                </div>
 
-            <select
-                value={selectedSeries}
-                onChange={(event) => setSelectedSeries(event.target.value)}
-                className="rounded-md border border-gray-700 bg-gray-800 px-3 py-1.5 text-sm text-gray-100 outline-none focus:border-blue-500"
-            >
-                <option value="1">시리즈 1</option>
-                <option value="2">시리즈 2</option>
-                <option value="3">시리즈 3</option>
-            </select>
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={handleZoomToggle}
+                        className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+                            isZoomMode ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                        }`}
+                    >
+                        줌
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleReset}
+                        className="rounded-md px-3 py-1.5 text-sm text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
+                    >
+                        초기화
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleFullscreen}
+                        className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
+                    >
+                        {isFullscreen ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
+                        <span>{isFullscreen ? '전체화면 종료' : '전체화면'}</span>
+                    </button>
+                </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-2">
-            <button
-                type="button"
-                onClick={handleZoomToggle}
-                className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-                    isZoomMode
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+            {/* 중앙 이미지 뷰어 영역 */}
+            <div
+                className={`relative flex flex-1 items-center justify-center overflow-hidden bg-black select-none ${
+                    isZoomMode && scale > 1
+                        ? isDragging ? 'cursor-grabbing' : 'cursor-grab'
+                        : isZoomMode ? 'cursor-zoom-in' : ''
                 }`}
+                onWheel={handleWheelZoom}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseLeave}
             >
-                줌
-            </button>
+                {/* 좌측 상단 정보 */}
+                <div className="absolute left-4 top-4 z-10 space-y-1 text-xs text-gray-200 pointer-events-none">
+                    <p>Patient ID : 00012345</p>
+                    <p>Study Date : 2026-07-25</p>
+                    <p>Series : {selectedSeries}</p>
+                </div>
 
-            <button
-                type="button"
-                className="rounded-md px-3 py-1.5 text-sm text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
-            >
-                팬
-            </button>
+                {/* 우측 상단 정보 */}
+                <div className="absolute right-4 top-4 z-10 space-y-1 text-right text-xs text-gray-200 pointer-events-none">
+                    <p>Frame : {currentFrame} / {totalFrames}</p>
+                    <p>LAO 45° / CRAN 20°</p>
+                </div>
 
-            <button
-                type="button"
-                className="rounded-md px-3 py-1.5 text-sm text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
-            >
-                측정
-            </button>
-
-            <button
-                type="button"
-                onClick={handleReset}
-                className="rounded-md px-3 py-1.5 text-sm text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
-            >
-                초기화
-            </button>
-
-            <button
-                type="button"
-                className="rounded-md px-3 py-1.5 text-sm text-gray-300 transition-colors hover:bg-gray-800 hover:text-white"
-            >
-                전체화면
-            </button>
-            </div>
-        </div>
-
-        {/* 영상이 표시될 영역 */}
-        <div
-            className={`relative flex flex-1 items-center justify-center overflow-hidden bg-black ${
-                isZoomMode && scale > 1
-                    ? isDragging
-                        ? 'cursor-grabbing'
-                        : 'cursor-grab'
-                    : isZoomMode
-                        ? 'cursor-zoom-in'
-                        : ''
-            }`}
-            onWheel={handleWheelZoom}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseLeave}
-            >
-            <div className="absolute left-4 top-4 z-10 space-y-1 text-xs text-gray-200">
-            <p>Patient ID : 00012345</p>
-            <p>Study Date : 2026-07-25</p>
-            <p>Series : {selectedSeries}</p>
-            </div>
-
-            <div className="absolute right-4 top-4 z-10 space-y-1 text-right text-xs text-gray-200">
-            <p>
-                Frame : {currentFrame} / {totalFrames}
-            </p>
-            <p>LAO 45°</p>
-            <p>CRAN 20°</p>
-            </div>
-
-            <div className="relative flex flex-1 min-h-0 items-center justify-center overflow-hidden bg-black">
-
+                {/* 이미지 본문 */}
                 <div className="flex h-full w-full items-center justify-center">
                     <img
-                    src={angioImage}
-                    alt="혈관조영술"
-                    className="max-h-full max-w-full select-none object-contain"
-                    style={{
-                        transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-                        transformOrigin: 'center center',
-                        transition: isDragging
-                            ? 'none' : 'transform 0.1s ease-out',
-                    }}
-                    draggable={false}
+                        src={angioImage}
+                        alt="혈관조영술"
+                        className="max-h-full max-w-full object-contain"
+                        style={{
+                            transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                            transformOrigin: 'center center',
+                            transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+                        }}
+                        draggable={false}
                     />
                 </div>
 
+                {/* 좌우 프레임 이동 버튼 */}
+                <button
+                    type="button"
+                    onClick={handlePreviousFrame}
+                    disabled={currentFrame === 1}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white hover:bg-black/70 disabled:opacity-30"
+                >
+                    <ChevronLeft size={24} />
+                </button>
+                <button
+                    type="button"
+                    onClick={handleNextFrame}
+                    disabled={currentFrame === totalFrames}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white hover:bg-black/70 disabled:opacity-30"
+                >
+                    <ChevronRight size={24} />
+                </button>
+
+                {/* 좌측 하단 정보 */}
+                <div className="absolute bottom-4 left-4 text-xs text-gray-200 pointer-events-none">
+                    <p>RCA</p>
+                    <p>W: 4095 / L: 2048</p>
+                </div>
             </div>
 
-            <button
-                type="button"
-                onClick={handlePreviousFrame}
-                disabled={currentFrame === 1}
-                className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white transition-colors hover:bg-black/70 disabled:cursor-not-allowed disabled:opacity-30"
-                title="이전 프레임"
-            >
-                <ChevronLeft size={24} />
-            </button>
+            {/* 하단 재생 컨트롤 */}
+            <div className="border-t border-gray-800 bg-gray-900 px-4 py-3">
+                <div className="flex items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={() => { setIsPlaying(false); setCurrentFrame(1) }}
+                        disabled={currentFrame === 1}
+                        className="rounded-md p-2 text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-30"
+                    >
+                        <SkipBack size={18} />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handlePreviousFrame}
+                        disabled={currentFrame === 1}
+                        className="rounded-md p-2 text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-30"
+                    >
+                        <ChevronLeft size={18} />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handlePlay}
+                        className="rounded-md bg-blue-600 p-2 text-white hover:bg-blue-500"
+                    >
+                        {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleNextFrame}
+                        disabled={currentFrame === totalFrames}
+                        className="rounded-md p-2 text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-30"
+                    >
+                        <ChevronRight size={18} />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => { setIsPlaying(false); setCurrentFrame(totalFrames) }}
+                        disabled={currentFrame === totalFrames}
+                        className="rounded-md p-2 text-gray-300 hover:bg-gray-800 hover:text-white disabled:opacity-30"
+                    >
+                        <SkipForward size={18} />
+                    </button>
 
-            <button
-                type="button"
-                onClick={handleNextFrame}
-                disabled={currentFrame === totalFrames}
-                className="absolute right-3 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white transition-colors hover:bg-black/70 disabled:cursor-not-allowed disabled:opacity-30"
-                title="다음 프레임"
-            >
-                <ChevronRight size={24} />
-            </button>
+                    <span className="min-w-20 text-center text-xs text-gray-300">
+                        {currentFrame} / {totalFrames}
+                    </span>
 
-            <div className="absolute bottom-4 left-4 text-xs text-gray-200">
-            <p>RCA</p>
-            <p>W: 4095 / L: 2048</p>
+                    <input
+                        type="range"
+                        min="1"
+                        max={totalFrames}
+                        value={currentFrame}
+                        onChange={(e) => { setIsPlaying(false); setCurrentFrame(Number(e.target.value)) }}
+                        className="h-1 flex-1 cursor-pointer accent-blue-500"
+                    />
+
+                    <select
+                        value={playbackSpeed}
+                        onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
+                        className="rounded-md border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs text-gray-100 outline-none focus:border-blue-500"
+                    >
+                        <option value={0.5}>0.5x</option>
+                        <option value={1}>1.0x</option>
+                        <option value={1.5}>1.5x</option>
+                        <option value={2}>2.0x</option>
+                    </select>
+                </div>
             </div>
-        </div>
-
-                {/* 하단 재생 컨트롤 */}
-        <div className="border-t border-gray-800 bg-gray-900 px-4 py-3">
-            <div className="flex items-center gap-3">
-            {/* 첫 프레임 */}
-            <button
-                type="button"
-                onClick={() => {
-                setIsPlaying(false)
-                setCurrentFrame(1)
-                }}
-                disabled={currentFrame === 1}
-                className="rounded-md p-2 text-gray-300 hover:bg-gray-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
-                title="첫 프레임"
-            >
-                <SkipBack size={18} />
-            </button>
-
-            {/* 이전 프레임 */}
-            <button
-                type="button"
-                onClick={handlePreviousFrame}
-                disabled={currentFrame === 1}
-                className="rounded-md p-2 text-gray-300 transition-colors hover:bg-gray-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
-                title="이전 프레임"
-            >
-                <ChevronLeft size={18} />
-            </button>
-
-            {/* 재생 / 일시정지 */}
-            <button
-                type="button"
-                onClick={handlePlay}
-                className="rounded-md bg-blue-600 p-2 text-white hover:bg-blue-500"
-                title={isPlaying ? '일시정지' : '재생'}
-            >
-                {isPlaying ? <Pause size={18} /> : <Play size={18} />}
-            </button>
-
-            {/* 다음 프레임 */}
-            <button
-                type="button"
-                onClick={handleNextFrame}
-                disabled={currentFrame === totalFrames}
-                className="rounded-md p-2 text-gray-300 transition-colors hover:bg-gray-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
-                title="다음 프레임"
-            >
-                <ChevronRight size={18} />
-            </button>
-
-            {/* 마지막 프레임 */}
-            <button
-                type="button"
-                onClick={() => {
-                setIsPlaying(false)
-                setCurrentFrame(totalFrames)
-                }}
-                disabled={currentFrame === totalFrames}
-                className="rounded-md p-2 text-gray-300 hover:bg-gray-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
-                title="마지막 프레임"
-            >
-                <SkipForward size={18} />
-            </button>
-
-            <span className="min-w-20 text-center text-xs text-gray-300">
-                {currentFrame} / {totalFrames}
-            </span>
-
-            <input
-                type="range"
-                min="1"
-                max={totalFrames}
-                value={currentFrame}
-                onChange={(event) => {
-                setIsPlaying(false)
-                setCurrentFrame(Number(event.target.value))
-                }}
-                className="h-1 flex-1 cursor-pointer accent-blue-500"
-            />
-
-            <select
-                value={playbackSpeed}
-                onChange={(event) =>
-                setPlaybackSpeed(Number(event.target.value))
-                }
-                className="rounded-md border border-gray-700 bg-gray-800 px-2 py-1.5 text-xs text-gray-100 outline-none focus:border-blue-500"
-            >
-                <option value={0.5}>0.5x</option>
-                <option value={1}>1.0x</option>
-                <option value={1.5}>1.5x</option>
-                <option value={2}>2.0x</option>
-            </select>
-        </div>
-    </div>
-</section>
-)
+        </section>
+    );
 }
 
-export default Main_viewer
+export default Main_viewer;
