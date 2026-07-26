@@ -276,21 +276,41 @@ export default function Dashboard({
   const [heatmapToggle, setHeatmapToggle] = useState(true)
 
   const handleAiPredict = async () => {
-    if (!aiFile) return
+    if (!aiFile) {
+      alert('분석할 이미지를 선택해주세요.')
+      return
+    }
+    const access = localStorage.getItem('access')
+    if (!access) {
+      alert('로그인 토큰이 없습니다. 다시 로그인해 주세요.')
+      return
+    }
     setAiLoading(true)
     setAiError('')
+    setAiResult(null)
     try {
-      // AI 예측 API 호출 로직 (필요시 연동)
-      setTimeout(() => {
-        setAiResult({
-          confidence: 0.92,
-          predicted_label: 'Stenosis',
-          probabilities: { normal: 0.08, stenosis: 0.92 }
-        })
-        setAiLoading(false)
-      }, 1000)
-    } catch (err) {
-      setAiError('AI 분석 중 오류가 발생했습니다.')
+      const formData = new FormData()
+      formData.append('file', aiFile)
+      const response = await fetch('http://34.80.83.7:8000/api/ai/predict/', {
+        method: 'POST',
+        headers: {
+          Authorization: Bearer ,
+        },
+        body: formData,
+      })
+      if (response.status === 401) {
+        setAiError('로그인이 만료되었습니다. 다시 로그인해 주세요.')
+        return
+      }
+      if (!response.ok) {
+        throw new Error('AI 분석 요청 실패')
+      }
+      const data = await response.json()
+      setAiResult(data)
+    } catch (error) {
+      console.error(error)
+      setAiError('AI 분석에 실패했습니다.')
+    } finally {
       setAiLoading(false)
     }
   }
@@ -328,7 +348,7 @@ export default function Dashboard({
 
       try {
         const response = await fetch(
-          `http://35.234.39.234:8000/api/patients/search/?q=${encodeURIComponent(keyword)}`,
+          `http://34.80.83.7:8000/api/patients/search/?q=${encodeURIComponent(keyword)}`,
           {
             headers: { Authorization: `Bearer ${access}` },
           }
