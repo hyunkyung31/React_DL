@@ -224,63 +224,60 @@ export default function Dashboard({
     })
   }
 
-  const handleSelectPatient = (patient) => {
-    setSelectedPatient(patient)
-    setCurrentMenu('patient-detail')
-    setIsSearchDropdownOpen(false)
-    setSidebarSearch('')
-  }
+const handleSelectPatient = (patient) => {
+  setSelectedPatient(patient)
+  setCurrentMenu('patient-detail')
+  setIsSearchDropdownOpen(false)
+  setSidebarSearch('')
+}
 
-  const handleSidebarSearchKeyDown = async (e) => {
-    if (e.key === 'Enter') {
-      const keyword = sidebarSearch.trim()
-      if (!keyword) return
+const handleSidebarSearchKeyDown = async (e) => {
+  if (e.key === 'Enter') {
+    const keyword = sidebarSearch.trim()
+    if (!keyword) return
 
-      const access = localStorage.getItem('access')
-      if (!access) {
-        alert('로그인 토큰이 없습니다. 다시 로그인해 주세요.')
+    const access = localStorage.getItem('access')
+    if (!access) {
+      alert('로그인 토큰이 없습니다. 다시 로그인해 주세요.')
+      return
+    }
+
+    try {
+      const response = await fetch(
+        `http://35.234.39.234:8000/api/patients/search/?q=${encodeURIComponent(keyword)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${access}`,
+          },
+        }
+      )
+
+      if (response.status === 401) {
+        alert('로그인이 만료되었습니다. 다시 로그인해 주세요.')
         return
       }
 
-      try {
-        const response = await fetch(`http://127.0.0.1:8000/api/patients/search/?q=${encodeURIComponent(keyword)}`, {
-          headers: {
-            'Authorization': `Bearer ${access}`,
-            'Content-Type': 'application/json',
-          },
-        })
-        
-        if (!response.ok) throw new Error('환자 검색 실패')
-        const results = await response.json()
-
-        if (results && results.length > 0) {
-          if (results.length === 1) {
-            handleSelectPatient(results[0])
-          } else {
-            setSearchResults(results)
-            setIsSearchDropdownOpen(true)
-          }
-        } else {
-          alert('일치하는 환자가 없습니다.')
-          setIsSearchDropdownOpen(false)
-        }
-      } catch (error) {
-        const matchedLocal = patients.filter(p => 
-          p.patient_name.toLowerCase().includes(keyword.toLowerCase()) || 
-          String(p.patient_id).toLowerCase().includes(keyword.toLowerCase())
-        )
-        if (matchedLocal.length === 1) {
-          handleSelectPatient(matchedLocal[0])
-        } else if (matchedLocal.length > 1) {
-          setSearchResults(matchedLocal)
-          setIsSearchDropdownOpen(true)
-        } else {
-          alert('일치하는 환자가 없습니다.')
-          setIsSearchDropdownOpen(false)
-        }
+      if (!response.ok) {
+        throw new Error('환자 검색 실패')
       }
+
+      const data = await response.json()
+      const results = Array.isArray(data) ? data : (data.results || [])
+
+      if (results.length > 0) {
+        setSearchResults(results)
+        setIsSearchDropdownOpen(true)
+      } else {
+        alert('일치하는 환자가 없습니다.')
+        setIsSearchDropdownOpen(false)
+      }
+    } catch (error) {
+      console.error('전체 환자 검색 오류:', error)
+      alert('환자 검색에 실패했습니다. 잠시 후 다시 시도해 주세요.')
+      setIsSearchDropdownOpen(false)
     }
   }
+}
 
   return (
     <div className="flex flex-col h-screen bg-gray-950 text-gray-100 overflow-hidden">
