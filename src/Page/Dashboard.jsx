@@ -130,10 +130,15 @@ export default function Dashboard({
   const [currentMenu, setCurrentMenu] = useState('dashboard')
   const [selectedPatient, setSelectedPatient] = useState(null)
 
-  // XAI 시각화 상태 
-  const [overlayMode, setOverlayMode] = useState('both')
+  // XAI 표시 모드: Bounding Box 또는 Heatmap
+  const [overlayMode, setOverlayMode] = useState('boundingBox')
   const [heatmapOpacity, setHeatmapOpacity] = useState(50)
   const [confidenceThreshold, setConfidenceThreshold] = useState(50)
+  const [isViewerImageLoaded, setIsViewerImageLoaded] = useState(false)
+
+  const viewerImageRef = useRef(null)
+  const heatmapCanvasRef = useRef(null)
+  const boundingBoxCanvasRef = useRef(null)
   
   // 모바일 반응형 사이드바 토글 상태
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
@@ -147,7 +152,6 @@ export default function Dashboard({
   const [totalFrames] = useState(300)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
-  const [heatmapToggle, setHeatmapToggle] = useState(true)
   const [selectedSeries, setSelectedSeries] = useState('1')
 
   // AI진단 (predict)
@@ -179,6 +183,225 @@ export default function Dashboard({
     }, interval)
     return () => clearInterval(timer)
   }, [isPlaying, playbackSpeed, totalFrames])
+
+  // 임시 XAI Heatmap 렌더링
+useEffect(() => {
+  const image = viewerImageRef.current
+  const canvas = heatmapCanvasRef.current
+
+  if (!image || !canvas || !isViewerImageLoaded) return
+
+  const drawHeatmap = () => {
+    const imageWidth = image.clientWidth
+    const imageHeight = image.clientHeight
+
+    if (imageWidth === 0 || imageHeight === 0) return
+
+    const pixelRatio = window.devicePixelRatio || 1
+
+    canvas.width = imageWidth * pixelRatio
+    canvas.height = imageHeight * pixelRatio
+    canvas.style.width = `${imageWidth}px`
+    canvas.style.height = `${imageHeight}px`
+
+    const context = canvas.getContext('2d')
+
+    if (!context) return
+
+    context.setTransform(
+      pixelRatio,
+      0,
+      0,
+      pixelRatio,
+      0,
+      0
+    )
+
+    context.clearRect(
+      0,
+      0,
+      imageWidth,
+      imageHeight
+    )
+
+    // Heatmap 모드에서만 표시
+    if (overlayMode !== 'heatmap') return
+
+    const opacity = heatmapOpacity / 100
+
+    const drawHeatPoint = (
+      centerX,
+      centerY,
+      radius,
+      intensity = 1
+    ) => {
+      const gradient = context.createRadialGradient(
+        centerX,
+        centerY,
+        0,
+        centerX,
+        centerY,
+        radius
+      )
+
+      gradient.addColorStop(0,  `rgba(255, 0, 0, ${opacity * intensity})`)
+      gradient.addColorStop(0.3, `rgba(255, 90, 0, ${opacity * intensity * 0.9})`)
+      gradient.addColorStop(0.55, `rgba(255, 200, 0, ${opacity * intensity * 0.65})`)
+      gradient.addColorStop(0.78, `rgba(170, 255, 0, ${opacity * intensity * 0.3})`)
+      gradient.addColorStop(1, 'rgba(170, 255, 0, 0)')
+
+      context.fillStyle = gradient
+
+      context.fillRect(
+        centerX - radius,
+        centerY - radius,
+        radius * 2,
+        radius * 2
+      )
+    }
+
+    // 중심 병변 영역
+    drawHeatPoint(
+      imageWidth * 0.53,
+      imageHeight * 0.45,
+      Math.min(imageWidth, imageHeight) * 0.24, 1
+    )
+
+    // 주변에 퍼지는 보조 영역
+    drawHeatPoint(
+      imageWidth * 0.47,
+      imageHeight * 0.40,
+      Math.min(imageWidth, imageHeight) * 0.16, 0.65
+    )
+
+    drawHeatPoint(
+      imageWidth * 0.59,
+      imageHeight * 0.50,
+      Math.min(imageWidth, imageHeight) * 0.14, 0.55
+    )
+  }
+
+  drawHeatmap()
+
+  window.addEventListener('resize', drawHeatmap)
+
+  return () => {
+    window.removeEventListener('resize', drawHeatmap)
+  }
+}, [
+  overlayMode,
+  heatmapOpacity,
+  isViewerImageLoaded,
+])
+
+  // Bounding Box 렌더링
+  useEffect(() => {
+    const image = viewerImageRef.current
+    const canvas = boundingBoxCanvasRef.current
+
+    if (!image || !canvas || !isViewerImageLoaded) return
+
+    const drawBoundingBoxes = () => {
+      const imageWidth = image.clientWidth
+      const imageHeight = image.clientHeight
+
+      if (imageWidth === 0 || imageHeight === 0) return
+
+      const pixelRatio = window.devicePixelRatio || 1
+
+      canvas.width = imageWidth * pixelRatio
+      canvas.height = imageHeight * pixelRatio
+      canvas.style.width = `${imageWidth}px`
+      canvas.style.height = `${imageHeight}px`
+
+      const context = canvas.getContext('2d')
+
+      if (!context) return
+
+      context.setTransform(
+        pixelRatio,
+        0,
+        0,
+        pixelRatio,
+        0,
+        0
+      )
+
+      context.clearRect(
+        0,
+        0,
+        imageWidth,
+        imageHeight
+      )
+
+    // Bounding Box 모드에서만 표시
+    if (overlayMode !== 'boundingBox') return
+
+    const mockBoundingBoxes = [
+      {
+        id: 1,
+        x: 120,
+        y: 90,
+        width: 150,
+        height: 120,
+        label: 'Stenosis',
+        confidence: 0.94,
+      },
+    ]
+
+    const scaleX = imageWidth / image.naturalWidth
+    const scaleY = imageHeight / image.naturalHeight
+
+    mockBoundingBoxes
+      .filter(
+        (box) =>
+          box.confidence * 100 >= confidenceThreshold
+      )
+      .forEach((box) => {
+        const boxX = box.x * scaleX
+        const boxY = box.y * scaleY
+        const boxWidth = box.width * scaleX
+        const boxHeight = box.height * scaleY
+
+        const labelText = `${box.label} ${Math.round(box.confidence * 100)}%`
+
+        context.strokeStyle = '#ef4444'
+        context.lineWidth = 4
+
+        context.strokeRect(
+          boxX,
+          boxY,
+          boxWidth,
+          boxHeight
+        )
+
+        context.font = 'bold 15px sans-serif'
+
+        const labelPadding = 6
+        const labelHeight = 24
+        const labelWidth = context.measureText(labelText).width + labelPadding * 2
+        const labelY = Math.max(boxY - labelHeight, 0)
+
+        context.fillStyle = '#ef4444'
+        context.fillRect(boxX, labelY, labelWidth, labelHeight)
+
+        context.fillStyle = '#ffffff'
+        context.fillText(labelText, boxX + labelPadding, labelY + 17)
+      })
+    }
+
+    drawBoundingBoxes()
+
+    window.addEventListener('resize', drawBoundingBoxes)
+
+    return () => {
+      window.removeEventListener('resize', drawBoundingBoxes)
+    }
+}, [
+  overlayMode,
+  confidenceThreshold,
+  isViewerImageLoaded,
+])
 
   // 뷰어 마우스 드래그 팬(Pan) 핸들러
   const handleMouseDown = (e) => {
@@ -569,16 +792,35 @@ const handleAiPredict = async () => {
                       <p>LAO 45° / CRAN 20°</p>
                     </div>
 
-                    <img 
-                      src={angioImage} 
-                      alt="혈관조영술" 
-                      className="max-h-full max-w-full object-contain pointer-events-none"
+                    <div
+                      className="relative inline-block max-h-full max-w-full"
                       style={{
                         transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-                        transition: isDragging ? 'none' : 'transform 0.1s ease-out'
+                        transformOrigin: 'center center',
+                        transition: isDragging
+                          ? 'none'
+                          : 'transform 0.1s ease-out',
                       }}
-                      draggable={false}
-                    />
+                    >
+                      <img
+                        ref={viewerImageRef}
+                        src={angioImage}
+                        alt="혈관조영술"
+                        onLoad={() => setIsViewerImageLoaded(true)}
+                        className="block max-h-full max-w-full object-contain pointer-events-none"
+                        draggable={false}
+                      />
+                      <canvas
+                        ref={heatmapCanvasRef}
+                        className="pointer-events-none absolute left-0 top-0 h-full w-full"
+                        aria-label="임시 AI Heatmap"
+                      />
+                      <canvas
+                        ref={boundingBoxCanvasRef}
+                        className="pointer-events-none absolute left-0 top-0 h-full w-full"
+                        aria-label="AI Bounding Box"
+                      />
+                    </div>
 
                     <button onClick={(e) => { e.stopPropagation(); setCurrentFrame(prev => Math.max(prev - 1, 1)); }} className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-gray-900/80 border border-blue-800/50 p-2 text-white hover:bg-gray-900 z-20 shadow-lg">
                       <ChevronLeft size={20} />
@@ -766,7 +1008,7 @@ const handleAiPredict = async () => {
                       )
                     )}
                   </div>
-                <div>
+                <div className="mt-4">
                   <Xai_visualization 
                       overlayMode={overlayMode}
                       setOverlayMode={setOverlayMode}
@@ -775,25 +1017,6 @@ const handleAiPredict = async () => {
                       confidenceThreshold={confidenceThreshold}
                       setConfidenceThreshold={setConfidenceThreshold}
                   />
-                </div>
-                <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-4 shrink-0 shadow-2xl">
-                  <div className="flex items-center justify-between mb-2">
-                    <h2 className="font-semibold text-sm text-white">히트맵 / 박스 오버레이</h2>
-                    <input
-                      type="checkbox"
-                      checked={heatmapToggle}
-                      onChange={() => setHeatmapToggle(!heatmapToggle)}
-                      className="cursor-pointer accent-blue-500"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-center text-xs text-gray-300">
-                    <div className="h-20 rounded-lg border border-blue-800/40 bg-gray-950 flex items-center justify-center overflow-hidden relative shadow-inner">
-                      <img src={angioImage} alt="히트맵" className="h-full w-full object-cover opacity-75" />
-                    </div>
-                    <div className="h-20 rounded-lg border border-blue-800/40 bg-gray-950 flex items-center justify-center overflow-hidden relative shadow-inner">
-                      <img src={angioImage} alt="박스" className="h-full w-full object-cover opacity-75" />
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
