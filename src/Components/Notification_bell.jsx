@@ -3,7 +3,7 @@ import { Bell, Loader2, RefreshCw, X } from 'lucide-react'
 
 const API_BASE_URL = 'http://34.80.83.7:8000'
 
-export default function NotificationBell() {
+export default function NotificationBell({onConsultationOpen,}) {
   const [notifications, setNotifications] = useState([])
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -102,13 +102,8 @@ export default function NotificationBell() {
         notification.consultation_id
       )
 
-      /*
-       * 추후 협진 화면 이동 기능 추가 위치:
-       *
-       * navigate(
-       *   `/consultations/${notification.consultation_id}`
-       * )
-       */
+      if (notification.type === 'consultation' && notification.consultation_id) {
+        onConsultationOpen?.(notification.consultation_id)}
     } catch (error) {
       console.error(
         '알림 읽음 처리 중 오류:',
@@ -227,9 +222,7 @@ export default function NotificationBell() {
                   key={notification.id}
                   type="button"
                   onClick={() =>
-                    handleNotificationClick(
-                      notification
-                    )
+                    handleNotificationClick(notification)
                   }
                   className={`block w-full border-b border-gray-800 px-4 py-3 text-left transition-colors last:border-b-0 ${
                     notification.is_read
