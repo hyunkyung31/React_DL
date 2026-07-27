@@ -701,7 +701,7 @@ useEffect(() => {
     try {
       const formData = new FormData()
       formData.append('file', aiFile)
-      const response = await fetch('http://34.80.83.7:8000/api/ai/gradcam/', {
+      const response = await fetch('http://34.80.83.7:8000/api/ai/image-analyze/', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${access}`,
@@ -713,14 +713,22 @@ useEffect(() => {
         return
       }
       if (!response.ok) {
-        throw new Error('AI 분석 요청 실패')
+        const errorData = await response.json().catch(() => null)
+
+        console.error('이미지 통합 API 오류:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: errorData,
+        })
+
+        throw new Error(errorData?.detail || `AI 분석 요청 실패 (${response.status})`)
       }
       const data = await response.json()
       console.log('AI 응답 전체:', data)
       setAiResult(data)
     } catch (error) {
-      console.error(error)
-      setAiError('AI 분석에 실패했습니다.')
+      console.error('AI 분석 오류:', error)
+      setAiError(String(error))
     } finally {
       setAiLoading(false)
     }
@@ -1294,7 +1302,11 @@ useEffect(() => {
 
                 {/* 3. [세 번째] EMR 최종 확정 패널 */}
                 <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-4 shadow-2xl">
-                  <EmrConfirmPanel />
+                  <EmrConfirmPanel
+                    impression={aiImpressionText}
+                    selectedVessels={selectedVessels}
+                    pciNeeded={pciNeeded}
+                  />
                 </div>
 
               </div>
