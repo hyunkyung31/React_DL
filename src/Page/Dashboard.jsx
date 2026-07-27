@@ -11,6 +11,7 @@ import {
   Video, FileBarChart, Settings, Square, Menu, X 
 } from 'lucide-react'
 import angioImage from '../assets/angio_sample.png'
+import { fetchAuthBlobUrl } from '../utils/authMedia'
 import Xai_visualization from '../Components/Xai_visualization'
 import Mace_risk from "../Components/Mace_risk"
 
@@ -552,9 +553,50 @@ useEffect(() => {
     })
   }
 
+  useEffect(() => {
+    let objectUrl = null
+    let cancelled = false
+
+    async function loadKeyFrame() {
+      if (!selectedPatient?.patient_id) {
+        return
+      }
+
+      const access = localStorage.getItem('access')
+      if (!access) return
+
+      try {
+        const res = await fetch(
+          `http://34.80.83.7:8000/api/patients/${selectedPatient.patient_id}/`,
+          { headers: { Authorization: `Bearer ${access}` } }
+        )
+        if (!res.ok) throw new Error('patient detail failed')
+
+        const data = await res.json()
+        const keyFrameUrl = data.examinations?.[0]?.key_frame_url
+        if (!keyFrameUrl) return
+
+        objectUrl = await fetchAuthBlobUrl(keyFrameUrl)
+        if (!cancelled) {
+          setIsViewerImageLoaded(false)
+          setAiPreviewUrl(objectUrl)
+        }
+      } catch (err) {
+        console.error('key_frame load failed', err)
+      }
+    }
+
+    loadKeyFrame()
+
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [selectedPatient])
+
   const handleSelectPatient = (patient) => {
     setSelectedPatient(patient)
-    setCurrentMenu('patient-detail')
+    setCurrentMenu('ai-diag') // 뷰어에서 GCS key frame 확인
     setIsSearchDropdownOpen(false)
     setSidebarSearch('')
     setIsMobileSidebarOpen(false) // 모바일에서 선택 시 사이드바 닫기
