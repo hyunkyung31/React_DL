@@ -410,12 +410,23 @@ function Main_viewer({
                                     isSelected ? 'border-blue-500 ring-2 ring-blue-500/50 scale-105' : 'border-gray-700 hover:border-gray-500 opacity-70 hover:opacity-100'
                                 }`}
                             >
-                                <div className="h-10 w-14 bg-black flex items-center justify-center overflow-hidden">
-                                    <img 
-                                        src={patientData?.imageUrl || patientData?.url || angioImage} 
-                                        alt={`프레임 ${frameNum}`} 
-                                        className="h-full w-full object-cover"
-                                    />
+                                <div className="h-10 w-14 bg-black flex items-center justify-center overflow-hidden relative">
+                                    {patientData?.mediaType === 'video' ? (
+                                        // 영상 파일인 경우 이미지 대신 프레임 번호와 비디오 아이콘/텍스트 표시
+                                        <div className="flex flex-col items-center justify-center text-[10px] text-gray-300 bg-gray-800 w-full h-full">
+                                            <span className="font-bold text-blue-400">VIDEO</span>
+                                            <span>F-{frameNum}</span>
+                                        </div>
+                                    ) : (
+                                        <img 
+                                            src={patientData?.imageUrl || patientData?.url || angioImage} 
+                                            alt={`프레임 ${frameNum}`} 
+                                            className="h-full w-full object-cover"
+                                            onError={(e) => {
+                                                e.target.style.display = 'none';
+                                            }}
+                                        />
+                                    )}
                                 </div>
                                 <span className={`text-[10px] w-full py-0.5 text-center ${isSelected ? 'bg-blue-600 text-white font-bold' : 'bg-gray-800 text-gray-300'}`}>
                                     {frameNum}
