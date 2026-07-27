@@ -13,8 +13,6 @@ function Xai_visualization({
     setHeatmapOpacity,
     confidenceThreshold,
     setConfidenceThreshold,
-    confidenceScore,
-    uncertaintyScore,
     aiLoading,
     hasAiResult,
 }) {
@@ -152,49 +150,6 @@ function Xai_visualization({
           <p className="mt-2 text-xs text-gray-500">
             설정값 이상의 탐지 결과만 표시합니다.
           </p>
-        </div>
-
-        {/* Confidence / Uncertainty Score */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
-            <div className="flex items-center gap-2 text-emerald-300">
-              <ShieldCheck size={17} />
-
-              <span className="text-sm font-medium">
-                Confidence
-              </span>
-            </div>
-
-            <p className="mt-3 text-3xl font-bold text-white">
-              {confidenceScore != null
-               ? `${confidenceScore}%` : '-'}
-            </p>
-
-            <p className="mt-1 text-xm text-gray-400">
-              {confidenceScore != null
-                ? 'AI 판단 신뢰도' : '분석 결과 없음'}
-            </p>
-          </div>
-
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
-            <div className="flex items-center gap-2 text-amber-300">
-              <TriangleAlert size={17} />
-
-              <span className="text-sm font-medium">
-                Uncertainty
-              </span>
-            </div>
-
-            <p className="mt-3 text-3xl font-bold text-white">
-              {uncertaintyScore != null
-                ? `${uncertaintyScore}%` : '-'}
-            </p>
-
-            <p className="mt-1 text-xm text-gray-400">
-              {uncertaintyScore != null
-                ? '신뢰도 기반 보완값' : '분석 결과 없음'}
-            </p>
-          </div>
         </div>
       </div>
     </section>

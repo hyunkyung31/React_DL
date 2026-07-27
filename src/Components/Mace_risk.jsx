@@ -5,6 +5,12 @@ export default function Mace_risk() {
   const riskScore = 18.7
   const riskLevel = '중간 위험'
 
+  const safeRiskScore = Math.min(Math.max(riskScore, 0), 100)
+
+  const riskPointX = 120 - 95 * Math.cos((Math.PI * safeRiskScore) / 100)
+
+  const riskPointY = 120 - 95 * Math.sin((Math.PI * safeRiskScore) / 100)
+
   return (
     <section className="overflow-hidden rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md shadow-2xl">
       {/* 제목 영역 */}
@@ -28,35 +34,99 @@ export default function Mace_risk() {
       <div className="space-y-5 p-4">
         {/* 위험도 요약 */}
         <div className="rounded-lg border border-gray-800 bg-gray-950/70 p-4">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <p className="text-sm text-gray-400">
-                심혈관 사건 및 사망 위험도
-              </p>
+          <p className="text-sm text-gray-400">
+            심혈관 사건 및 사망 위험도
+          </p>
 
-              <p className="mt-2 text-3xl font-bold text-white">
-                {riskScore}%
-              </p>
-            </div>
+          <div className="mt-4">
+            <div className="relative mx-auto w-full max-w-[300px]">
+              <svg
+                viewBox="0 0 240 150"
+                className="h-auto w-full"
+                role="img"
+                aria-label={`3년 내 MACE 위험도 ${riskScore}%`}
+              >
+                {/* 전체 게이지 배경 */}
+                <path
+                  d="M 25 120 A 95 95 0 0 1 215 120"
+                  fill="none"
+                  stroke="#1f2937"
+                  strokeWidth="20"
+                  strokeLinecap="round"
+                />
 
-            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-sm font-semibold text-amber-300">
-              {riskLevel}
-            </span>
-          </div>
+                {/* 낮음 구간 */}
+                <path
+                  d="M 25 120 A 95 95 0 0 1 72.5 37.73"
+                  fill="none"
+                  stroke="#10b981"
+                  strokeWidth="20"
+                />
 
-          {/* 위험도 게이지 */}
-          <div className="mt-5">
-            <div className="mb-2 flex justify-between text-xs text-gray-500">
-              <span>낮음</span>
-              <span>중간</span>
-              <span>높음</span>
-            </div>
+                {/* 중간 구간 */}
+                <path
+                  d="M 72.5 37.73 A 95 95 0 0 1 167.5 37.73"
+                  fill="none"
+                  stroke="#f59e0b"
+                  strokeWidth="20"
+                />
 
-            <div className="relative h-2.5 overflow-hidden rounded-full bg-gray-800">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-amber-400 to-red-500"
-                style={{ width: `${riskScore}%` }}
-              />
+                {/* 높음 구간 */}
+                <path
+                  d="M 167.5 37.73 A 95 95 0 0 1 215 120"
+                  fill="none"
+                  stroke="#ef4444"
+                  strokeWidth="20"
+                />
+
+                {/* 현재 위험도 위치 */}
+                <circle
+                  cx={riskPointX}
+                  cy={riskPointY}
+                  r="6"
+                  fill="#ffffff"
+                  stroke="#111827"
+                  strokeWidth="3"
+                />
+
+                {/* 위험도 숫자 */}
+                <text
+                  x="120"
+                  y="93"
+                  textAnchor="middle"
+                  fill="#ffffff"
+                  fontSize="32"
+                  fontWeight="700"
+                >
+                  {riskScore}%
+                </text>
+
+                {/* 위험 단계 */}
+                <text
+                  x="120"
+                  y="117"
+                  textAnchor="middle"
+                  fill="#fbbf24"
+                  fontSize="13"
+                  fontWeight="600"
+                >
+                  {riskLevel}
+                </text>
+              </svg>
+
+              {/* 위험 단계 라벨 */}
+              <div className="-mt-1 flex justify-between px-1 text-xs text-gray-500">
+                <span>낮음</span>
+                <span>중간</span>
+                <span>높음</span>
+              </div>
+
+              {/* 위험도 눈금 */}
+              <div className="mt-1 flex justify-between px-1 text-[10px] text-gray-600">
+                <span>0%</span>
+                <span>50%</span>
+                <span>100%</span>
+              </div>
             </div>
           </div>
         </div>
@@ -70,23 +140,43 @@ export default function Mace_risk() {
 
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div className="rounded-lg border border-gray-800 bg-gray-950/60 p-3">
-              <p className="text-gray-500">협착 개수</p>
-              <p className="mt-1 font-semibold text-white">2개</p>
+              <p className="text-gray-500">
+                협착 개수
+              </p>
+
+              <p className="mt-1 text-base font-bold text-white">
+                2개
+              </p>
             </div>
 
             <div className="rounded-lg border border-gray-800 bg-gray-950/60 p-3">
-              <p className="text-gray-500">환자 나이</p>
-              <p className="mt-1 font-semibold text-white">67세</p>
+              <p className="text-gray-500">
+                환자 나이
+              </p>
+
+              <p className="mt-1 text-base font-bold text-white">
+                67세
+              </p>
             </div>
 
             <div className="rounded-lg border border-gray-800 bg-gray-950/60 p-3">
-              <p className="text-gray-500">고혈압</p>
-              <p className="mt-1 font-semibold text-white">있음</p>
+              <p className="text-gray-500">
+                고혈압
+              </p>
+
+              <p className="mt-1 text-base font-bold text-white">
+                있음
+              </p>
             </div>
 
             <div className="rounded-lg border border-gray-800 bg-gray-950/60 p-3">
-              <p className="text-gray-500">당뇨병</p>
-              <p className="mt-1 font-semibold text-white">있음</p>
+              <p className="text-gray-500">
+                당뇨병
+              </p>
+
+              <p className="mt-1 text-base font-bold text-white">
+                있음
+              </p>
             </div>
           </div>
         </div>
@@ -98,8 +188,10 @@ export default function Mace_risk() {
             className="mt-0.5 shrink-0 text-amber-300"
           />
 
-          <p>
-            현재는 UI 확인을 위한 임시값이며, 향후 실제 MACE 예측 API 응답과 연동할 예정입니다.
+          <p className="leading-relaxed">
+            현재는 UI 확인을 위한 임시값입니다.
+            <br />
+            향후 실제 MACE 예측 API 응답과 연동할 예정입니다.
           </p>
         </div>
       </div>

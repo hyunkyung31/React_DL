@@ -173,6 +173,14 @@ export default function Dashboard({
   const [aiError, setAiError] = useState('')
   const [isAiDragOver, setIsAiDragOver] = useState(false)
 
+  // AI 결과 신뢰도
+  const confidenceScore = aiResult?.confidence != null
+    ? Number((aiResult.confidence * 100).toFixed(1)) : null 
+
+  // AI 결과 불확실도
+  const uncertaintyScore = aiResult?.confidence != null
+    ? Number(((1 - aiResult.confidence) * 100).toFixed(1)) : null
+
   // 실제 XAI 응답 우선, 없으면 Mock 사용
   const xaiData = useMemo(() => { return {
     showGradcam: aiResult?.show_gradcam ?? aiResult?.predicted_label === 'Stenosis',
@@ -180,6 +188,10 @@ export default function Dashboard({
     overlayBase64: aiResult?.overlay_base64 ?? null,
     boundingBoxes: aiResult?.bounding_boxes ?? aiResult?.boxes ?? [{ id: 1, x: 120, y: 90, width: 150, height: 120, label: 'Stenosis', confidence: 0.94,},],}
   }, [aiResult])
+
+  // 실제 YOLO Detection 결과
+  const yoloDetections = aiResult?.detections ?? aiResult?.yolo_result?.detections ?? []
+
 
   // 뷰어 인터랙션 상태 (줌인, 줌아웃, 팬, 전체화면)
   const [scale, setScale] = useState(1)
@@ -667,7 +679,7 @@ useEffect(() => {
     try {
       const formData = new FormData()
       formData.append('file', aiFile)
-      const response = await fetch('http://34.80.83.7:8000/api/ai/predict/', {
+      const response = await fetch('http://34.80.83.7:8000/api/ai/gradcam/', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${access}`,
@@ -948,16 +960,11 @@ useEffect(() => {
 
                       {overlayMode === 'heatmap' && aiResult && xaiData.showGradcam && xaiData.heatmapBase64 && (
                         <img
-                          src={`data:image/png;base64,${xaiData.heatmapBase64}`}
+                          src={`data:image/png;base64,${aiResult.overlay_base64}`}
                           alt="Grad-CAM Heatmap"
                           className="pointer-events-none absolute inset-0 h-full w-full object-contain"
                           style={{ opacity: heatmapOpacity / 100, }} /> )}
 
-                      <canvas
-                        ref={heatmapCanvasRef}
-                        className="pointer-events-none absolute left-0 top-0 h-full w-full"
-                        aria-label="임시 AI Heatmap"
-                      />
                       <canvas
                         ref={boundingBoxCanvasRef}
                         className="pointer-events-none absolute left-0 top-0 h-full w-full"
