@@ -7,12 +7,24 @@ import { LayoutDashboard, Users, Stethoscope, Cpu, Bookmark, ArrowRight, Activit
 export default function Home({ displayName, patients = [], onNavigate, onSelectPatient }) {
   const recentPatients = patients.slice(0, 5)
   const totalPatientsCount = patients.length
-  const normalCount = patients.filter(p => (p.ecg_result || '정상') === '정상').length
-  const alertCount = totalPatientsCount - normalCount
+
+  // AI CAD 기준: No CAD = 정상, Obstructive/lesion = 주의 (ECG와 분리)
+  const isNormalAi = (p) => {
+    const s = String(p.latest_severity_class || '').toLowerCase()
+    if (!s) return false
+    return s.includes('no cad') || s === 'normal'
+  }
+  const isAlertAi = (p) => {
+    const s = String(p.latest_severity_class || '').toLowerCase()
+    return s.includes('obstructive') || p.has_lesion === true
+  }
+
+  const normalCount = patients.filter(isNormalAi).length
+  const alertCount = patients.filter(isAlertAi).length
 
   // 퍼센트 계산 (데이터가 0일 경우 레이아웃 유지를 위해 기본 가상 비율 적용 가능)
-  const normalPercent = totalPatientsCount > 0 ? Math.round((normalCount / totalPatientsCount) * 100) : 85
-  const alertPercent = totalPatientsCount > 0 ? Math.round((alertCount / totalPatientsCount) * 100) : 15
+  const normalPercent = totalPatientsCount > 0 ? Math.round((normalCount / totalPatientsCount) * 100) : 0
+  const alertPercent = totalPatientsCount > 0 ? Math.round((alertCount / totalPatientsCount) * 100) : 0
 
   return (
     <div className="flex-1 p-6 text-gray-100 overflow-y-auto space-y-6" style={{ backgroundColor: '#060B18' }}>
@@ -62,7 +74,7 @@ export default function Home({ displayName, patients = [], onNavigate, onSelectP
         <div className="p-4 rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md shadow-xl space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-gray-400 font-medium">정상 소견</p>
+              <p className="text-xs text-gray-400 font-medium">정상 소견 (AI No CAD)</p>
               <p className="text-2xl font-bold text-emerald-400 mt-1">{normalCount}명</p>
             </div>
             <div className="p-3 rounded-lg bg-emerald-950/80 border border-emerald-800 text-emerald-400">
@@ -78,7 +90,7 @@ export default function Home({ displayName, patients = [], onNavigate, onSelectP
         <div className="p-4 rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md shadow-xl space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-gray-400 font-medium">정밀 진단/주의</p>
+              <p className="text-xs text-gray-400 font-medium">정밀 진단/주의 (AI)</p>
               <p className="text-2xl font-bold text-red-400 mt-1">{alertCount}명</p>
             </div>
             <div className="p-3 rounded-lg bg-red-950/80 border border-red-800 text-red-400">
