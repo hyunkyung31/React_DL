@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import angioImage from '../assets/angio_sample.png'
-import { Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from 'lucide-react'
+import { Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Maximize2, Minimize2, FolderSearch } from 'lucide-react'
 
 function Main_viewer({
     patientData,
@@ -19,7 +19,6 @@ function Main_viewer({
 
     const imageRef = useRef(null)
     const overlayCanvasRef = useRef(null)
-    const heatmapCanvasRef = useRef(null)
 
     const [position, setPosition] = useState({ x: 0, y: 0 })
     const dragStartRef = useRef({ mouseX: 0, mouseY: 0, imageX: 0, imageY: 0 })
@@ -27,7 +26,6 @@ function Main_viewer({
 
     const totalFrames = 250
 
-    // 자동 재생
     const mockBoundingBoxes = [{
         id: 1,
         x: 100,
@@ -69,18 +67,12 @@ function Main_viewer({
     useEffect(() => {
         const handleFullscreenChange = () => {
             setIsFullscreen(Boolean(document.fullscreenElement))
-    }
+        }
 
-        document.addEventListener(
-            'fullscreenchange',
-            handleFullscreenChange
-        )
+        document.addEventListener('fullscreenchange', handleFullscreenChange)
 
         return () => {
-            document.removeEventListener(
-            'fullscreenchange',
-            handleFullscreenChange
-            )
+            document.removeEventListener('fullscreenchange', handleFullscreenChange)
         }
     }, [])
 
@@ -106,100 +98,48 @@ function Main_viewer({
 
             const context = canvas.getContext('2d')
 
-            context.setTransform(
-                pixelRatio,
-                0,
-                0,
-                pixelRatio,
-                0,
-                0
-            )
-
-            // 이전에 그린 내용을 전체 삭제
-            context.clearRect(
-                0,
-                0,
-                imageWidth,
-                imageHeight
-            )
+            context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
+            context.clearRect(0, 0, imageWidth, imageHeight)
 
             const shouldShowBoundingBox = overlayMode === 'boundingBox'
-            const shouldShowHeatmap = overlayMode === 'heatmap'
-
             if (!shouldShowBoundingBox) return
 
             const scaleX = imageWidth / image.naturalWidth
             const scaleY = imageHeight / image.naturalHeight
 
             mockBoundingBoxes
-                .filter(
-                    (box) =>
-                        box.confidence * 100 >= confidenceThreshold
-                )
-            .forEach((box) => {
-                const boxX = box.x * scaleX
-                const boxY = box.y * scaleY
-                const boxWidth = box.width * scaleX
-                const boxHeight = box.height * scaleY
+                .filter((box) => box.confidence * 100 >= confidenceThreshold)
+                .forEach((box) => {
+                    const boxX = box.x * scaleX
+                    const boxY = box.y * scaleY
+                    const boxWidth = box.width * scaleX
+                    const boxHeight = box.height * scaleY
 
-                const labelText = `${box.label} ${Math.round(
-                    box.confidence * 100
-                )}%`
+                    const labelText = `${box.label} ${Math.round(box.confidence * 100)}%`
 
-            context.strokeStyle = '#ef4444'
-            context.lineWidth = 5
+                    context.strokeStyle = '#ef4444'
+                    context.lineWidth = 5
+                    context.strokeRect(boxX, boxY, boxWidth, boxHeight)
 
-            context.strokeRect(
-                boxX,
-                boxY,
-                boxWidth,
-                boxHeight
-            )
+                    context.font = 'bold 18px sans-serif'
+                    const labelWidth = context.measureText(labelText).width + 12
+                    const labelHeight = 22
 
-            context.font = 'bold 18px sans-serif'
+                    context.fillStyle = '#ef4444'
+                    context.fillRect(boxX, Math.max(boxY - labelHeight, 0), labelWidth, labelHeight)
 
-            const labelWidth =
-                context.measureText(labelText).width + 12
+                    context.fillStyle = '#ffffff'
+                    context.fillText(labelText, boxX + 6, Math.max(boxY - 7, 15))
+                })
+        }
 
-            const labelHeight = 22
+        drawBoundingBoxes()
+        window.addEventListener('resize', drawBoundingBoxes)
 
-            context.fillStyle = '#ef4444'
-
-            context.fillRect(
-                boxX,
-                Math.max(boxY - labelHeight, 0),
-                labelWidth,
-                labelHeight
-            )
-
-            context.fillStyle = '#ffffff'
-
-            context.fillText(
-                labelText,
-                boxX + 6,
-                Math.max(boxY - 7, 15)
-            )
-        })
-    }
-
-    drawBoundingBoxes()
-
-    window.addEventListener(
-        'resize',
-        drawBoundingBoxes
-    )
-
-    return () => {
-        window.removeEventListener(
-        'resize',
-        drawBoundingBoxes
-        )
-    }
-    }, [
-        overlayMode,
-        confidenceThreshold,
-        isImageLoaded,
-    ])
+        return () => {
+            window.removeEventListener('resize', drawBoundingBoxes)
+        }
+    }, [overlayMode, confidenceThreshold, isImageLoaded])
 
     const handlePreviousFrame = () => {
         setIsPlaying(false)
@@ -291,13 +231,32 @@ function Main_viewer({
     const handleMouseUp = () => setIsDragging(false)
     const handleMouseLeave = () => setIsDragging(false)
 
-    // 선택된 데이터가 없을 경우 처리
+    // 선택된 환자 데이터가 없을 경우 처리
     if (!patientData) {
         return (
-            <section className="flex h-full min-h-[500px] flex-col items-center justify-center overflow-hidden rounded-lg border border-gray-800 bg-gray-900 text-gray-400">
-                <p className="text-sm">좌측 목록에서 환자나 북마크를 선택해주세요.</p>
+            <section className="flex h-full min-h-[500px] flex-col items-center justify-center rounded-lg border border-gray-800 bg-gray-900 text-gray-400">
+                <div className="flex flex-col items-center gap-3 p-6 text-center">
+                    <div className="rounded-full bg-gray-800 p-4 text-blue-500">
+                        <FolderSearch size={36} />
+                    </div>
+                    <h3 className="text-lg font-medium text-white">선택된 환자 영상이 없습니다</h3>
+                    <p className="text-sm text-gray-400">
+                        좌측 메뉴의 환자 목록이나 빠른 검색을 통해 진단할 환자를 선택해 주세요.
+                    </p>
+                </div>
             </section>
         );
+    }
+
+    // 썸네일 스트립 바를 위한 주변 프레임 목록 생성 (현재 프레임 기준 앞뒤로 3개씩 총 7개)
+    const getThumbnailFrames = () => {
+        const frames = []
+        const start = Math.max(1, currentFrame - 3)
+        const end = Math.min(totalFrames, currentFrame + 3)
+        for (let i = start; i <= end; i++) {
+            frames.push(i)
+        }
+        return frames
     }
 
     return (
@@ -363,20 +322,17 @@ function Main_viewer({
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseLeave}
             >
-                {/* 좌측 상단 정보 (동적 맵핑) */}
                 <div className="absolute left-4 top-4 z-10 space-y-1 text-xs text-gray-200 pointer-events-none">
                     <p>Patient ID : {patientData.patientId || patientData.id || '00012345'}</p>
                     <p>Study Date : {patientData.date || '2026-07-25'}</p>
                     <p>Series : {selectedSeries}</p>
                 </div>
 
-                {/* 우측 상단 정보 */}
                 <div className="absolute right-4 top-4 z-10 space-y-1 text-right text-xs text-gray-200 pointer-events-none">
                     <p>Frame : {currentFrame} / {totalFrames}</p>
                     <p>LAO 45° / CRAN 20°</p>
                 </div>
 
-                {/* 이미지 본문 (API나 데이터에서 전달된 image/video URL 연동) */}
                 <div className="flex h-full w-full items-center justify-center">
                     {patientData?.mediaType === 'video' ? (
                       <iframe
@@ -389,29 +345,28 @@ function Main_viewer({
                       <div
                         className="relative inline-block max-h-full max-w-full"
                         style={{
-                          transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-                          transformOrigin: 'center center',
-                          transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+                            transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                            transformOrigin: 'center center',
+                            transition: isDragging ? 'none' : 'transform 0.1s ease-out',
                         }}
                       >
                         <img
-                          ref={imageRef}
-                          src={patientData?.imageUrl || patientData?.url || angioImage}
-                          alt="혈관조영술"
-                          onLoad={() => setIsImageLoaded(true)}
-                          className="max-h-full max-w-full select-none object-contain"
-                          draggable={false}
+                            ref={imageRef}
+                            src={patientData?.imageUrl || patientData?.url || angioImage}
+                            alt="혈관조영술"
+                            onLoad={() => setIsImageLoaded(true)}
+                            className="max-h-full max-w-full select-none object-contain"
+                            draggable={false}
                         />
                         <canvas
-                          ref={overlayCanvasRef}
-                          className="pointer-events-none absolute left-0 top-0 h-full w-full"
-                          aria-label="AI 협착 탐지 Bounding Box"
+                            ref={overlayCanvasRef}
+                            className="pointer-events-none absolute left-0 top-0 h-full w-full"
+                            aria-label="AI 협착 탐지 Bounding Box"
                         />
                       </div>
                     )}
                 </div>
 
-                {/* 좌우 프레임 이동 버튼 */}
                 <button
                     type="button"
                     onClick={handlePreviousFrame}
@@ -430,16 +385,47 @@ function Main_viewer({
                     <ChevronRight size={24} />
                 </button>
 
-                {/* 좌측 하단 정보 */}
                 <div className="absolute bottom-4 left-4 text-xs text-gray-200 pointer-events-none">
                     <p>{patientData.vessel || 'RCA'}</p>
                     <p>W: 4095 / L: 2048</p>
                 </div>
-
             </div>
 
-            {/* 하단 재생 컨트롤 */}
-            <div className="border-t border-gray-800 bg-gray-900 px-4 py-3">
+            {/* 하단 재생 컨트롤 및 썸네일 스트립 바 영역 */}
+            <div className="border-t border-gray-800 bg-gray-900 px-4 py-3 space-y-3">
+                {/* 썸네일 스트립 바 */}
+                <div className="flex items-center justify-center gap-2 overflow-x-auto py-1">
+                    <span className="text-xs text-gray-400 mr-2">프레임 썸네일:</span>
+                    {getThumbnailFrames().map((frameNum) => {
+                        const isSelected = frameNum === currentFrame
+                        return (
+                            <button
+                                key={frameNum}
+                                type="button"
+                                onClick={() => {
+                                    setIsPlaying(false)
+                                    setCurrentFrame(frameNum)
+                                }}
+                                className={`group relative flex flex-col items-center rounded overflow-hidden border transition-all ${
+                                    isSelected ? 'border-blue-500 ring-2 ring-blue-500/50 scale-105' : 'border-gray-700 hover:border-gray-500 opacity-70 hover:opacity-100'
+                                }`}
+                            >
+                                <div className="h-10 w-14 bg-black flex items-center justify-center overflow-hidden">
+                                    <img 
+                                        src={patientData?.imageUrl || patientData?.url || angioImage} 
+                                        alt={`프레임 ${frameNum}`} 
+                                        className="h-full w-full object-cover"
+                                    />
+                                </div>
+                                <span className={`text-[10px] w-full py-0.5 text-center ${isSelected ? 'bg-blue-600 text-white font-bold' : 'bg-gray-800 text-gray-300'}`}>
+                                    {frameNum}
+                                </span>
+                            </button>
+                        )
+                    })}
+                </div>
+
+                {/* 컨트롤 바 (재생, 슬라이더, 속도조절 등) */}
                 <div className="flex items-center gap-3">
                     <button
                         type="button"
