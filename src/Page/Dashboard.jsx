@@ -545,11 +545,27 @@ useEffect(() => {
     if (!onAddBookmark) return
     const minutes = String(Math.floor(currentFrame / 60 / 10)).padStart(2, '0')
     const seconds = String(Math.floor((currentFrame / 10) % 60)).padStart(2, '0')
-    
+
+    // AI 결과가 있으면 bbox로 넣고, 없으면 빈 배열
+    const bboxFromAi =
+      aiResult && (aiResult.bbox || aiResult.box)
+        ? [
+            {
+              id: 'ai-1',
+              ...(aiResult.bbox || aiResult.box),
+              label: aiResult.predicted_label || 'Stenosis',
+              score: aiResult.confidence ?? null,
+            },
+          ]
+        : []
+
     onAddBookmark({
       title: `프레임 ${currentFrame} 분석 지점`,
-      patientId: selectedPatient ? selectedPatient.patient_id : '공통',
-      note: `타임라인 ${minutes}:${seconds} 구간 확인`
+      patientId: selectedPatient ? selectedPatient.patient_id : null,
+      note: `타임라인 ${minutes}:${seconds} 구간 확인`,
+      frameNumber: currentFrame,
+      examId: selectedPatient?.latest_exam_id ?? selectedPatient?.exam_id ?? null,
+      bboxData: bboxFromAi,
     })
   }
 
