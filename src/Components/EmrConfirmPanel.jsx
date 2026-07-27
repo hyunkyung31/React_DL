@@ -10,6 +10,7 @@ export default function EmrConfirmPanel({
   pciNeeded = null,
   onSignOff,
   patientId,
+  onConfirm,
 }) {
   const [isSignedOff, setIsSignedOff] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -160,10 +161,10 @@ export default function EmrConfirmPanel({
         ) : (
           <button
             type="button"
-            onClick={handleConfirm}
-            disabled={
-              isSubmitting || !hasImpression
-            }
+            onClick={onConfirm}
+            // disabled={
+            //   isSubmitting || !hasImpression
+            // }
             className="box-border flex w-full min-w-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50">
             <CheckCircle2 size={16} />
 
