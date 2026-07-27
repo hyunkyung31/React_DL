@@ -29,6 +29,35 @@ import Home from './Home'
 export function PatientManagement({ patients, errorMessage, onSelectPatient }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [searchCategory, setSearchCategory] = useState('all')
+  const [ecgModal, setEcgModal] = useState(null) // { patientId, ecgResult, objectUrl }
+  const [ecgLoadingId, setEcgLoadingId] = useState(null)
+
+  const openEcgModal = async (patient) => {
+    if (!patient?.ecg_image_url) {
+      alert('ECG 이미지가 없습니다. 생성/배포를 확인하세요.')
+      return
+    }
+    setEcgLoadingId(patient.patient_id)
+    try {
+      const objectUrl = await fetchAuthBlobUrl(patient.ecg_image_url)
+      setEcgModal({
+        patientId: patient.patient_id,
+        ecgResult: patient.ecg_result,
+        objectUrl,
+      })
+    } catch (e) {
+      console.error(e)
+      alert('ECG 이미지를 불러오지 못했습니다.')
+    } finally {
+      setEcgLoadingId(null)
+    }
+  }
+
+  const closeEcgModal = () => {
+    if (ecgModal?.objectUrl) URL.revokeObjectURL(ecgModal.objectUrl)
+    setEcgModal(null)
+    setEcgLoadingId(null)
+  }
 
   const filteredPatients = patients.filter((patient) => {
     if (!patient) return false
@@ -95,9 +124,20 @@ export function PatientManagement({ patients, errorMessage, onSelectPatient }) {
                     <td className="px-6 py-4 text-gray-200">{patient.age}세 / {patient.gender}</td>
                     <td className="px-6 py-4 text-gray-200">{patient.chief_complaint || '-'}</td>
                     <td className="px-6 py-4">
-                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-900/60 text-blue-300 border border-blue-700/60 shadow-inner">
-                        {patient.ecg_result || '정상'}
-                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openEcgModal(patient)
+                        }}
+                        disabled={ecgLoadingId === patient.patient_id}
+                        className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-900/60 text-blue-300 border border-blue-700/60 shadow-inner hover:bg-blue-800/80 cursor-pointer disabled:opacity-50 disabled:cursor-wait"
+                        title="ECG 이미지 보기"
+                      >
+                        {ecgLoadingId === patient.patient_id
+                          ? '로딩...'
+                          : (patient.ecg_result || '-')}
+                      </button>
                     </td>
                     <td className="px-6 py-4 font-mono text-gray-200">
                       {patient.troponin_t_level != null && patient.troponin_t_level !== ''
@@ -125,6 +165,37 @@ export function PatientManagement({ patients, errorMessage, onSelectPatient }) {
           </table>
         </div>
       </div>
+
+      {ecgModal?.objectUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={closeEcgModal}
+        >
+          <div
+            className="bg-gray-950 border border-blue-800/50 rounded-xl max-w-5xl w-full p-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-white font-semibold text-sm">
+                ECG — {ecgModal.patientId} ({ecgModal.ecgResult})
+              </h3>
+              <button
+                type="button"
+                onClick={closeEcgModal}
+                className="text-gray-300 hover:text-white text-sm px-2 py-1"
+              >
+                닫기
+              </button>
+            </div>
+            <img
+              src={ecgModal.objectUrl}
+              alt="12-lead ECG"
+              className="w-full h-auto rounded bg-white"
+            />
+            <p className="text-xs text-gray-500 mt-2">데모용 합성 12유도 이미지</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -558,13 +629,16 @@ const handleFrameChange = (newFrame) => {
   }
 
   const handleTriggerAddBookmark = () => {
-    if (!onAddBookmark) return
-    if (!selectedPatient?.patient_id && !selectedDiagPatient?.patient_id) {
+    if (!onAddBookmark) {
+      alert('북마크 기능을 사용할 수 없습니다. 다시 로그인해 주세요.')
+      return
+    }
+    const patientId = selectedDiagPatient?.patient_id || selectedPatient?.patient_id
+    if (!patientId) {
       alert('환자를 먼저 선택하세요')
       return
     }
 
-    const patientId = selectedDiagPatient?.patient_id || selectedPatient?.patient_id
     const minutes = String(Math.floor(currentFrame / 60 / 10)).padStart(2, '0')
     const seconds = String(Math.floor((currentFrame / 10) % 60)).padStart(2, '0')
 
@@ -589,6 +663,59 @@ const handleFrameChange = (newFrame) => {
       bboxData: bboxFromAi,
     })
   }
+
+  // 환자 선택 시 DB/GCS key_frame을 AI 뷰어에 로드
+  useEffect(() => {
+    let objectUrl = null
+    let cancelled = false
+
+    async function loadKeyFrame() {
+      if (!selectedPatient?.patient_id) return
+
+      const access = localStorage.getItem('access')
+      if (!access) return
+
+      try {
+        const res = await fetch(
+          `http://34.80.83.7:8000/api/patients/${selectedPatient.patient_id}/`,
+          { headers: { Authorization: `Bearer ${access}` } }
+        )
+        if (!res.ok) throw new Error('patient detail failed')
+
+        const data = await res.json()
+        const keyFrameUrl = data.examinations?.[0]?.key_frame_url
+        if (!keyFrameUrl) {
+          console.warn('key_frame_url missing for', selectedPatient.patient_id)
+          return
+        }
+
+        objectUrl = await fetchAuthBlobUrl(keyFrameUrl)
+        if (cancelled) return
+
+        const blobRes = await fetch(objectUrl)
+        const blob = await blobRes.blob()
+        const file = new File([blob], `${selectedPatient.patient_id}_key_frame.png`, {
+          type: blob.type || 'image/png',
+        })
+
+        setIsViewerImageLoaded(false)
+        setAiFileUrl(objectUrl)
+        setAiFile(file)
+        setAiFileType('image')
+        setAiResult(null)
+        setAiError('')
+      } catch (err) {
+        console.error('key_frame load failed', err)
+      }
+    }
+
+    loadKeyFrame()
+
+    return () => {
+      cancelled = true
+      // objectUrl은 다음 이미지로 교체될 때 뷰어가 쓰므로 여기서 revoke하지 않음
+    }
+  }, [selectedPatient])
 
   const handleSelectPatient = (patient) => {
     setSelectedPatient(patient)
