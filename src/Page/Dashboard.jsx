@@ -460,6 +460,11 @@ export default function Dashboard({
       }
     }
 
+    // cross-origin 캔버스 실패 시 현재 뷰어 이미지 URL로 폴백
+    if (!capturedSnapshotUrl && aiFileUrl) {
+      capturedSnapshotUrl = aiFileUrl;
+    }
+
     onAddBookmark({
       title: `프레임 ${currentFrame} 분석 지점`,
       patientId: patientId,

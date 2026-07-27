@@ -36,7 +36,33 @@ export default function BookmarkView({ bookmarks = [], onSelectBookmark, onDelet
         return;
       }
 
-      const rawUrl = resolveBookmarkRawUrl(selectedItem);
+      let rawUrl = resolveBookmarkRawUrl(selectedItem);
+
+      // 로컬 캐시(캔버스 data URL) — API에 snapshot이 없을 때
+      if (!rawUrl && selectedItem.id) {
+        try {
+          const cache = JSON.parse(localStorage.getItem('bookmark_snapshots') || '{}');
+          rawUrl = cache[String(selectedItem.id)] || '';
+        } catch (_) {
+          rawUrl = '';
+        }
+      }
+
+      // 최후 폴백: 환자 key_frame
+      if (!rawUrl && selectedItem.patientId) {
+        try {
+          const access = localStorage.getItem('access');
+          const res = await fetch(`http://34.80.83.7:8000/api/patients/${selectedItem.patientId}/`, {
+            headers: { Authorization: access ? `Bearer ${access}` : '' },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            rawUrl = data.examinations?.[0]?.key_frame_url || '';
+          }
+        } catch (err) {
+          console.error('북마크 환자 미디어 폴백 실패:', err);
+        }
+      }
 
       if (!rawUrl) {
         setModalMediaUrl('');
