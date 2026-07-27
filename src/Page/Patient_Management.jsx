@@ -79,7 +79,7 @@ export default function PatientManagement({ patients, errorMessage, onSelectPati
                         {patient.ecg_result || '정상'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-amber-300 font-semibold">
+                    <td className="px-6 py-4 font-mono text-gray-300">
                       {patient.troponin_t_level != null && patient.troponin_t_level !== ''
                         ? `${patient.troponin_t_level} ng/L`
                         : '-'}

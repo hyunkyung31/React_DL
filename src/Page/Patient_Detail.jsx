@@ -61,7 +61,7 @@ export default function PatientDetail({ patient, onBack }) {
           </div>
           <div>
             <span className="text-xs text-gray-400 block mb-1">Troponin T</span>
-            <span className="text-amber-300 text-sm font-semibold">
+            <span className="text-gray-200 text-sm font-mono">
               {patient.troponin_t_level != null && patient.troponin_t_level !== ''
                 ? `${patient.troponin_t_level} ng/L`
                 : '-'}
