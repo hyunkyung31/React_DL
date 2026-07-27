@@ -225,8 +225,8 @@ export default function Dashboard({
 
   const [showHeatmap, setShowHeatmap] = useState(true)
   const [showBoundingBox, setShowBoundingBox] = useState(true)
-  const [heatmapOpacity, setHeatmapOpacity] = useState(50)
-  const [confidenceThreshold, setConfidenceThreshold] = useState(50)
+  const [heatmapOpacity, setHeatmapOpacity] = useState(65)
+  const [confidenceThreshold, setConfidenceThreshold] = useState(25)
   const [isViewerImageLoaded, setIsViewerImageLoaded] = useState(false)
 
   const viewerImageRef = useRef(null)
@@ -492,11 +492,30 @@ export default function Dashboard({
           x: norm ? norm[0] * (detection.image_width || 1) : x1,
           y: norm ? norm[1] * (detection.image_height || 1) : y1,
           width: norm ? (norm[2] - norm[0]) * (detection.image_width || 1) : Math.max(0, x2 - x1),
-          height: norm ? (norm[3] - norm[1]) * (detection.image_height || 1) : Math.max(0, y2 - y2),
+          height: norm ? (norm[3] - norm[1]) * (detection.image_height || 1) : Math.max(0, y2 - y1),
           label: det.class_name || det.label || 'Stenosis',
           confidence: det.confidence ?? 0,
         }
       })
+      console.log('[AI detect]', {
+        detection_count: detections.length,
+        mapped_boxes: boundingBoxes.length,
+        confidences: boundingBoxes.map((b) => b.confidence),
+        sizes: boundingBoxes.map((b) => ({ w: b.width, h: b.height })),
+        has_heatmap: Boolean(
+          classification.heatmap_base64
+          || classification.overlay_base64
+          || data.heatmap_base64
+          || data.overlay_base64
+        ),
+        show_gradcam: classification.show_gradcam ?? data.show_gradcam,
+      })
+      const heatmapBase64 =
+        classification.heatmap_base64
+        ?? classification.overlay_base64
+        ?? data.heatmap_base64
+        ?? data.overlay_base64
+        ?? null
       setAiResult({
         ...data,
         ...classification,
@@ -504,11 +523,14 @@ export default function Dashboard({
         confidence: classification.confidence ?? data.confidence,
         probabilities: classification.probabilities ?? data.probabilities,
         show_gradcam: classification.show_gradcam ?? data.show_gradcam,
-        heatmap_base64: classification.heatmap_base64 ?? data.heatmap_base64,
-        overlay_base64: classification.overlay_base64 ?? data.overlay_base64,
+        heatmap_base64: heatmapBase64,
+        overlay_base64: classification.overlay_base64 ?? data.overlay_base64 ?? heatmapBase64,
         detections,
         bounding_boxes: boundingBoxes.length ? boundingBoxes : (data.bounding_boxes || data.boxes || []),
       })
+      // 분석 직후 둘 다 켠 상태로 시작 (이후 토글로 개별 on/off)
+      setShowHeatmap(true)
+      setShowBoundingBox(true)
     } catch (error) {
       console.error('AI 분석 오류:', error)
       setAiError(String(error))
