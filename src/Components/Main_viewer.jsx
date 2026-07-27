@@ -8,7 +8,8 @@ import {
 
 function Main_viewer({
     patientData,
-    overlayMode,
+    showHeatmap = true,
+    showBoundingBox = true,
     confidenceThreshold,
     aiFileUrl = null,
     aiResult = null,
@@ -168,7 +169,7 @@ function Main_viewer({
             context.clearRect(0, 0, imageWidth, imageHeight)
 
             // 1. Grad-CAM heatmap
-            if (overlayMode === 'heatmap' && heatmapImage) {
+            if (showHeatmap && heatmapImage) {
                 context.save()
                 context.globalAlpha = Math.max(0, Math.min(1, (heatmapOpacity || 0) / 100))
                 context.drawImage(heatmapImage, 0, 0, imageWidth, imageHeight)
@@ -176,7 +177,7 @@ function Main_viewer({
             }
 
             // 2. AI Bounding Box
-            if (overlayMode === 'boundingBox') {
+            if (showBoundingBox) {
                 const scaleX = image.naturalWidth ? imageWidth / image.naturalWidth : 1
                 const scaleY = image.naturalHeight ? imageHeight / image.naturalHeight : 1
 
@@ -209,7 +210,7 @@ function Main_viewer({
             drawAnnotations(context)
         }
 
-        if (overlayMode === 'heatmap' && heatmapSrc) {
+        if (showHeatmap && heatmapSrc) {
             const loader = new Image()
             loader.onload = () => {
                 if (cancelled) return
@@ -231,7 +232,8 @@ function Main_viewer({
             window.removeEventListener('resize', drawCanvasContent)
         }
     }, [
-        overlayMode,
+        showHeatmap,
+        showBoundingBox,
         confidenceThreshold,
         heatmapOpacity,
         isImageLoaded,
