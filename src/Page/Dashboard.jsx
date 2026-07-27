@@ -1140,6 +1140,7 @@ export default function Dashboard({
                       impression={aiImpressionText}
                       selectedVessels={selectedVessels}
                       pciNeeded={pciNeeded}
+                      patientId={selectedDiagPatient?.patient_id || selectedPatient?.patient_id}
                     />
                   </div>
                 </div>
