@@ -223,7 +223,8 @@ export default function Dashboard({
   const [isPatientLoading, setIsPatientLoading] = useState(false)
 
   // XAI 시각화 상태 
-  const [overlayMode, setOverlayMode] = useState('heatmap')
+  const [showHeatmap, setShowHeatmap] = useState(true)
+  const [showBoundingBox, setShowBoundingBox] = useState(true)
   const [heatmapOpacity, setHeatmapOpacity] = useState(50)
   const [confidenceThreshold, setConfidenceThreshold] = useState(50)
   const [isViewerImageLoaded, setIsViewerImageLoaded] = useState(false)
@@ -422,7 +423,7 @@ export default function Dashboard({
       context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
       context.clearRect(0, 0, imageWidth, imageHeight)
 
-      if (overlayMode !== 'heatmap') return
+      if (!showHeatmap) return
       if (xaiData.heatmapBase64) return
 
       const opacity = heatmapOpacity / 100
@@ -446,7 +447,7 @@ export default function Dashboard({
     drawHeatmap()
     window.addEventListener('resize', drawHeatmap)
     return () => window.removeEventListener('resize', drawHeatmap)
-  }, [overlayMode, heatmapOpacity, isViewerImageLoaded, aiResult, xaiData.heatmapBase64])
+  }, [showHeatmap, heatmapOpacity, isViewerImageLoaded, aiResult, xaiData.heatmapBase64])
 
   // Bounding Box 렌더링
   useEffect(() => {
@@ -480,7 +481,7 @@ export default function Dashboard({
       context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
       context.clearRect(0, 0, imageWidth, imageHeight)
 
-      if (overlayMode !== 'boundingBox') return
+      if (!showBoundingBox) return
 
       const scaleX = imageWidth / image.naturalWidth
       const scaleY = imageHeight / image.naturalHeight
@@ -514,7 +515,7 @@ export default function Dashboard({
     drawBoundingBoxes()
     window.addEventListener('resize', drawBoundingBoxes)
     return () => window.removeEventListener('resize', drawBoundingBoxes)
-  }, [overlayMode, confidenceThreshold, isViewerImageLoaded, aiResult, xaiData.boundingBoxes])
+  }, [showBoundingBox, confidenceThreshold, isViewerImageLoaded, aiResult, xaiData.boundingBoxes])
 
   // 마우스 상호작용 핸들러
   const handleMouseDown = (e) => {
@@ -1020,7 +1021,8 @@ export default function Dashboard({
                   aiFileUrl={aiFileUrl}
                   aiFileType={aiFileType}
                   aiResult={aiResult}
-                  overlayMode={overlayMode}
+                  showHeatmap={showHeatmap}
+                  showBoundingBox={showBoundingBox}
                   confidenceThreshold={confidenceThreshold}
                   heatmapOpacity={heatmapOpacity}
                   currentFrame={currentFrame}
@@ -1087,8 +1089,10 @@ export default function Dashboard({
 
                   <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-3 shadow-2xl">
                     <Xai_visualization 
-                        overlayMode={overlayMode}
-                        setOverlayMode={setOverlayMode}
+                        showHeatmap={showHeatmap}
+                        setShowHeatmap={setShowHeatmap}
+                        showBoundingBox={showBoundingBox}
+                        setShowBoundingBox={setShowBoundingBox}
                         heatmapOpacity={heatmapOpacity}
                         setHeatmapOpacity={setHeatmapOpacity}
                         confidenceThreshold={confidenceThreshold}
