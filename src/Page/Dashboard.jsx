@@ -256,7 +256,8 @@ export default function Dashboard({
     showGradcam: aiResult?.show_gradcam ?? aiResult?.predicted_label === 'Stenosis',
     heatmapBase64: aiResult?.heatmap_base64 ?? null,
     overlayBase64: aiResult?.overlay_base64 ?? null,
-    boundingBoxes: aiResult?.bounding_boxes ?? aiResult?.boxes ?? [{ id: 1, x: 120, y: 90, width: 150, height: 120, label: 'Stenosis', confidence: 0.94,},],}
+    boundingBoxes: aiResult?.bounding_boxes ?? aiResult?.boxes ?? [],
+  }
   }, [aiResult])
 
   const [scale, setScale] = useState(1)

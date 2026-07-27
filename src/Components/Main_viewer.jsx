@@ -48,11 +48,6 @@ function Main_viewer({
 
     const totalFrames = 250
 
-    const mockBoundingBoxes = [
-        { id: 1, x: 100, y: 100, width: 200, height: 200, label: 'Stenosis', confidence: 0.92 },
-        { id: 2, x: 365, y: 310, width: 105, height: 80, label: 'Stenosis', confidence: 0.81 },
-    ]
-
     // 환자 데이터 변경 시 초기화
     useEffect(() => {
         setCustomImageUrl(null)
@@ -115,9 +110,7 @@ function Main_viewer({
             aiResult?.heatmap_base64 || aiResult?.overlay_base64
         )
 
-        const boxes = aiResult
-            ? (aiResult.bounding_boxes || aiResult.boxes || [])
-            : mockBoundingBoxes
+        const boxes = aiResult?.bounding_boxes || aiResult?.boxes || []
 
         const drawAnnotations = (context) => {
             userAnnotations.forEach((ann) => {
