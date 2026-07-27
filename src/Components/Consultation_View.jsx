@@ -1,5 +1,47 @@
 import { useState, useEffect, useRef } from 'react'
-import { Stethoscope, Plus, Send, Loader2, Search } from 'lucide-react'
+import { Stethoscope, Plus, Send, Loader2, Search, CheckCircle2, CircleAlert, X, } from 'lucide-react'
+
+const MOCK_CONSULTATIONS = [
+  {
+    id: 1,
+    patientName: '김민준',
+    patientId: 'P-2026-001',
+    department: '순환기내과',
+    receiver: '김순환',
+    requester: '박의사 (영상의학과)',
+    priority: '일반 (Routine)',
+    reason: '관상동맥 조영술에서 LAD 협착 의심 소견이 확인되어 추가 평가를 요청합니다.',
+    note: '최근 흉통 증상이 반복되어 빠른 검토 부탁드립니다.',
+    date: '2026-07-27T09:30:00',
+    status: '대기',
+  },
+  {
+    id: 2,
+    patientName: '이서연',
+    patientId: 'P-2026-014',
+    department: '심장혈관흉부외과',
+    receiver: '강정맥',
+    requester: '박의사 (영상의학과)',
+    priority: '응급 (Urgent)',
+    reason: 'RCA 중증 협착이 의심되어 수술적 치료 가능성 검토를 요청합니다.',
+    note: 'AI 분석 결과와 주요 프레임을 함께 확인해주세요.',
+    date: '2026-07-26T14:20:00',
+    status: '진행중',
+  },
+  {
+    id: 3,
+    patientName: '박지훈',
+    patientId: 'P-2026-028',
+    department: '순환기내과',
+    receiver: '이심장',
+    requester: '박의사 (영상의학과)',
+    priority: '일반 (Routine)',
+    reason: '중등도 협착 소견에 대한 약물 치료 및 추적 관찰 계획 수립을 요청합니다.',
+    note: '',
+    date: '2026-07-25T11:10:00',
+    status: '완료',
+  },
+]
 
 export default function ConsultationView({ selectedPatient, currentUserName }) {
   const [consultations, setConsultations] = useState([])
@@ -7,6 +49,9 @@ export default function ConsultationView({ selectedPatient, currentUserName }) {
   const [isWriting, setIsWriting] = useState(false)
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [notification, setNotification] = useState(null)
+
+  const notificationTimerRef = useRef(null)
 
   // API로 불러올 환자 목록 및 의사 목록 상태
   const [patientList, setPatientList] = useState([])
@@ -21,10 +66,13 @@ export default function ConsultationView({ selectedPatient, currentUserName }) {
 
   // 신규 요청 폼 상태
   const [newForm, setNewForm] = useState({
-    patientName: selectedPatient ? selectedPatient.patient_name : '',
-    patientId: selectedPatient ? selectedPatient.patient_id : '',
+    patientName: selectedPatient?.patient_name || '',
+    patientId: selectedPatient?.patient_id || '',
     department: '순환기내과',
+
+    receiverId: '',
     receiver: '',
+
     requester: currentUserName || '박의사 (영상의학과)',
     priority: '일반 (Routine)',
     reason: '',
@@ -42,45 +90,75 @@ export default function ConsultationView({ selectedPatient, currentUserName }) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // 1. 초기 데이터 로드 (환자, 의사, 협진 목록 병렬 API 호출)
+  // 컴포넌트 사라질 때 타이머 제거 처리
+  useEffect(() => {
+    return () => {
+      if (notificationTimerRef.current) {window.clearTimeout(notificationTimerRef.current)}}
+  }, [])
+
+  // 초기 데이터 로드
+  // 환자·의사 목록은 실제 API, 협진 목록은 임시 Mock 사용
   const fetchInitialData = async () => {
     setLoading(true)
+
     try {
-      const token = localStorage.getItem('token') || ''
+      const token =
+        localStorage.getItem('access') || ''
+
       const headers = {
         'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        ...(token
+          ? {
+              Authorization: `Bearer ${token}`,
+            }
+          : {}),
       }
 
-      const [patientRes, doctorRes, consultRes] = await Promise.all([
-        fetch('http://34.80.83.7:8000/api/patients', { headers }),
-        fetch('http://34.80.83.7:8000/api/doctors', { headers }),
-        fetch('http://34.80.83.7:8000/api/consultations', { headers })
-      ])
+      const [patientRes, doctorRes] = await Promise.all([
+          fetch('http://34.80.83.7:8000/api/patients/', { headers }),
+          fetch('http://34.80.83.7:8000/api/doctors/', { headers }),
+        ])
 
       if (patientRes.ok) {
         const patientData = await patientRes.json()
-        setPatientList(patientData)
+
+        setPatientList(
+          Array.isArray(patientData)
+            ? patientData : patientData.results || []
+        )
       } else {
-        console.error('환자 목록 불러오기 실패:', patientRes.status)
+        console.error(
+          '환자 목록 불러오기 실패:',
+          patientRes.status
+        )
       }
 
       if (doctorRes.ok) {
         const doctorData = await doctorRes.json()
-        setDoctorsList(doctorData)
+
+        console.log('의사 API 응답:', doctorData)
+
+        const normalizedDoctors = Array.isArray(doctorData)
+          ? doctorData : doctorData.results || doctorData.doctors || []
+
+        console.log('의사 목록 정규화:', normalizedDoctors)
+
+        setDoctorsList(normalizedDoctors)
       } else {
-        console.error('의사 목록 불러오기 실패:', doctorRes.status)
+        console.error(
+          '의사 목록 불러오기 실패:',
+          doctorRes.status
+        )
       }
 
-      if (consultRes.ok) {
-        const consultData = await consultRes.json()
-        setConsultations(consultData)
-      } else {
-        console.error('협진 목록 불러오기 실패:', consultRes.status)
-      }
-
+      setConsultations(MOCK_CONSULTATIONS)
     } catch (error) {
-      console.error('API 연동 중 오류 발생:', error)
+      console.error(
+        '초기 데이터 로드 중 오류 발생:',
+        error
+      )
+
+      setConsultations(MOCK_CONSULTATIONS)
     } finally {
       setLoading(false)
     }
@@ -112,63 +190,189 @@ export default function ConsultationView({ selectedPatient, currentUserName }) {
   const filteredPatients = patientList.filter(p => {
     const query = (newForm.patientName || '').trim().toLowerCase()
     const name = (p.patient_name || '').toLowerCase()
-    const id = (p.patient_id || '').toLowerCase()
+    const id = String(p.patient_id || '').toLowerCase()
     // 빈 값이면 전체 목록 표시, 아니면 이름이나 ID에 포함되는지 확인
     return query === '' || name.includes(query) || id.includes(query)
   })
+  // 알람 함수 
+  const showNotification = (type, message) => {
+    if (notificationTimerRef.current) {window.clearTimeout(notificationTimerRef.current)}
+
+    setNotification({type, message,})
+
+    notificationTimerRef.current = window.setTimeout(() => {setNotification(null)}, 3000)}
 
   // 2. 신규 협진 요청 전송 (POST API 연동)
   const handleCreateSubmit = async (e) => {
-    e.preventDefault()
-    if (!newForm.patientName || !newForm.reason) {
-      alert('환자 이름과 협진 사유는 필수 입력 항목입니다.')
-      return
-    }
+  e.preventDefault()
 
-    setSubmitting(true)
-    try {
-      const token = localStorage.getItem('token') || ''
-      const headers = {
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      }
-
-      const response = await fetch('http://34.80.83.7:8000/api/consultations', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(newForm)
-      })
-
-      if (!response.ok) throw new Error('요청 전송에 실패했습니다.')
-      
-      // 목록 새로고침
-      const consultRes = await fetch('http://34.80.83.7:8000/api/consultations', { headers })
-      if (consultRes.ok) {
-        const data = await consultRes.json()
-        setConsultations(data)
-      }
-
-      setIsWriting(false)
-      setNewForm({
-        patientName: selectedPatient ? selectedPatient.patient_name : '',
-        patientId: selectedPatient ? selectedPatient.patient_id : '',
-        department: '순환기내과',
-        receiver: '',
-        requester: currentUserName || '박의사 (영상의학과)',
-        priority: '일반 (Routine)',
-        reason: '',
-        note: ''
-      })
-      alert('협진 요청이 성공적으로 전송되었습니다.')
-    } catch (error) {
-      console.error('전송 에러:', error)
-      alert('서버 통신 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.')
-    } finally {
-      setSubmitting(false)
-    }
+  if (!newForm.patientId) {
+    showNotification(
+      'error',
+      '환자 목록에서 환자를 선택해주세요.'
+    )
+    return
   }
 
+  if (!newForm.receiverId) {
+    showNotification(
+      'error',
+      '담당 전문의를 선택해주세요.'
+    )
+    return
+  }
+
+  if (!newForm.reason.trim()) {
+    showNotification(
+      'error',
+      '협진 요청 사유를 입력해주세요.'
+    )
+    return
+  }
+
+  const access = localStorage.getItem('access')
+
+  if (!access) {
+    showNotification(
+      'error',
+      '로그인 정보가 없습니다. 다시 로그인해주세요.'
+    )
+    return
+  }
+
+  setSubmitting(true)
+
+  try {
+    const response = await fetch(
+      'http://34.80.83.7:8000/api/consultations/',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${access}`,
+        },
+        body: JSON.stringify({
+          patientId: newForm.patientId,
+          receiverId: newForm.receiverId,
+          reason: newForm.reason.trim(),
+
+          // 백엔드 serializer가 지원하면 함께 저장됩니다.
+          department: newForm.department,
+          priority: newForm.priority,
+          note: newForm.note.trim(),
+        }),
+      }
+    )
+
+    const responseData = await response
+      .json()
+      .catch(() => null)
+
+    console.log('협진 저장 상태:', response.status)
+    console.log('협진 저장 응답:', responseData)
+
+    if (!response.ok) {
+      const errorMessage =
+        responseData?.detail ||
+        responseData?.message ||
+        Object.values(responseData || {})
+          .flat()
+          .join(' ') ||
+        `협진 요청 저장 실패 (${response.status})`
+
+      throw new Error(errorMessage)
+    }
+
+    // 생성된 협진 객체를 목록 맨 위에 추가
+    if (responseData) {
+      setConsultations((prev) => [
+        responseData,
+        ...prev,
+      ])
+
+      setSelectedConsult(responseData)
+    }
+
+    setIsWriting(false)
+
+    showNotification(
+      'success',
+      `${newForm.receiver} 전문의에게 협진 요청을 전송했습니다.`
+    )
+
+    setNewForm({
+      patientName:
+        selectedPatient?.patient_name || '',
+      patientId:
+        selectedPatient?.patient_id || '',
+      department: '순환기내과',
+      receiverId: '',
+      receiver: '',
+      requester:
+        currentUserName ||
+        '박의사 (영상의학과)',
+      priority: '일반 (Routine)',
+      reason: '',
+      note: '',
+    })
+  } catch (error) {
+    console.error('협진 요청 저장 오류:', error)
+
+    showNotification(
+      'error',
+      error?.message ||
+        '협진 요청 저장 중 오류가 발생했습니다.'
+    )
+  } finally {
+    setSubmitting(false)
+  }
+}
+
   return (
+    <>
+      {notification && (
+        // 알림 UI
+      <div
+        className={`fixed right-5 top-5 z-[100] flex max-w-sm items-start gap-3 rounded-lg border px-4 py-3 shadow-2xl backdrop-blur-md ${
+          notification.type === 'success'
+            ? 'border-emerald-500/40 bg-emerald-950/95 text-emerald-100' : 'border-red-500/40 bg-red-950/95 text-red-100'
+        }`}
+        role="alert"
+      >
+        {notification.type === 'success' ? (
+          <CheckCircle2
+            size={18}
+            className="mt-0.5 shrink-0 text-emerald-400"
+          />
+        ) : (
+          <CircleAlert
+            size={18}
+            className="mt-0.5 shrink-0 text-red-400"
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">
+            {notification.type === 'success'
+              ? '저장 완료'
+              : '저장 실패'}
+          </p>
+
+          <p className="mt-0.5 text-xs opacity-80">
+            {notification.message}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setNotification(null)}
+          className="shrink-0 opacity-60 hover:opacity-100"
+          aria-label="알림 닫기"
+        >
+          <X size={15} />
+        </button>
+      </div>
+    )}
+
     <div className="flex-1 p-4 bg-gray-950 text-gray-100 grid grid-cols-3 gap-4 overflow-hidden">
       
       {/* 1열: 사이드바 (협진 목록 + 검색 연동) */}
@@ -313,8 +517,8 @@ export default function ConsultationView({ selectedPatient, currentUserName }) {
                   <select 
                     value={newForm.department}
                     onChange={e => {
-                      const selectedDept = e.target.value;
-                      setNewForm(prev => ({ ...prev, department: selectedDept, receiver: '' }));
+                      const selectedDept = e.target.value
+                      setNewForm(prev => ({ ...prev, department: selectedDept, receiverId: '', receiver: '' }))
                     }}
                     className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white outline-none"
                   >
@@ -324,18 +528,38 @@ export default function ConsultationView({ selectedPatient, currentUserName }) {
                 </div>
                 <div>
                   <label className="block text-gray-400 mb-1">담당 전문의 (의사 API 연동)</label>
-                  <select 
-                    value={newForm.receiver} 
-                    onChange={e => setNewForm({...newForm, receiver: e.target.value})}
+                  <select
+                    value={newForm.receiverId}
+                    onChange={(e) => {
+                      const selectedDoctor = doctorsList.find(
+                        (doctor) =>
+                          doctor.doctor_id === e.target.value
+                      )
+
+                      console.log('선택한 의사:', selectedDoctor)
+
+                      setNewForm((prev) => ({
+                        ...prev,
+                        receiverId: selectedDoctor?.doctor_id || '',
+                        receiver: selectedDoctor?.doctor_name || '',
+                      }))
+                    }}
                     className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white outline-none"
                     required
                   >
                     <option value="">전문의 선택</option>
+
                     {doctorsList
-                      .filter(doc => doc.department === newForm.department)
-                      .map(doc => (
-                        <option key={doc.doctor_id} value={doc.doctor_name}>
-                          {doc.doctor_name} ({doc.hospital_name})
+                      .filter(
+                        (doctor) =>
+                          doctor.department === newForm.department
+                      )
+                      .map((doctor) => (
+                        <option
+                          key={doctor.doctor_id}
+                          value={doctor.doctor_id}
+                        >
+                          {doctor.doctor_name} · {doctor.hospital_name}
                         </option>
                       ))}
                   </select>
@@ -391,7 +615,7 @@ export default function ConsultationView({ selectedPatient, currentUserName }) {
                   className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded font-semibold shadow disabled:opacity-50"
                 >
                   {submitting ? <Loader2 className="animate-spin" size={14} /> : <Send size={14} />}
-                  {submitting ? '전송 중...' : '협진 요청 전송'}
+                  {submitting ? '저장 중...' : '협진 요청 전송'}
                 </button>
               </div>
             </form>
@@ -460,5 +684,6 @@ export default function ConsultationView({ selectedPatient, currentUserName }) {
       </div>
 
     </div>
+  </>
   )
 }

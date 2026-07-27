@@ -14,6 +14,7 @@ import angioImage from '../assets/angio_sample.png'
 import { fetchAuthBlobUrl } from '../utils/authMedia'
 import Xai_visualization from '../Components/Xai_visualization'
 import Mace_risk from "../Components/Mace_risk"
+import NotificationBell from '../Components/Notification_bell'
 
 // ==========================================
 // [희욱 파트] 신규 컴포넌트 3종 Import
@@ -694,7 +695,7 @@ const handleFrameChange = (newFrame) => {
           <h1 className="text-white font-bold text-sm md:text-lg tracking-wide truncate">혈관조영술 AI 진단 시스템</h1>
         </div>
         <div className="flex items-center space-x-4">
-          <span className="hidden sm:inline text-sm text-gray-200 hover:text-white cursor-pointer">알림</span>
+          <NotificationBell />
           <span className="text-xs md:text-sm font-medium text-blue-200">{displayName} (의료진)</span>
           <button onClick={onLogout} className="text-xs md:text-sm text-red-400 hover:text-red-300 font-medium">로그아웃</button>
         </div>
