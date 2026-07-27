@@ -42,7 +42,7 @@ export default function PatientDetail({ patient, onBack }) {
         </div>
 
         {/* 환자 기본 정보 요약 카드 */}
-        <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">
+        <div className="bg-gray-900 p-6 rounded-xl border border-gray-800 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 shrink-0">
           <div>
             <span className="text-xs text-gray-400 block mb-1">환자 ID</span>
             <span className="font-mono text-white text-sm">{patient.patient_id}</span>
@@ -56,8 +56,20 @@ export default function PatientDetail({ patient, onBack }) {
             <span className="text-white text-sm">{patient.age}세 / {patient.gender}</span>
           </div>
           <div>
-            <span className="text-xs text-gray-400 block mb-1">ECG 결과 / 주호소</span>
-            <span className="text-blue-400 text-sm font-semibold">{patient.ecg_result || '정상'} ({patient.chief_complaint || '-'})</span>
+            <span className="text-xs text-gray-400 block mb-1">ECG 결과</span>
+            <span className="text-blue-400 text-sm font-semibold">{patient.ecg_result || '-'}</span>
+          </div>
+          <div>
+            <span className="text-xs text-gray-400 block mb-1">Troponin T</span>
+            <span className="text-amber-300 text-sm font-semibold">
+              {patient.troponin_t_level != null && patient.troponin_t_level !== ''
+                ? `${patient.troponin_t_level} ng/L`
+                : '-'}
+            </span>
+          </div>
+          <div>
+            <span className="text-xs text-gray-400 block mb-1">주호소</span>
+            <span className="text-white text-sm">{patient.chief_complaint || '-'}</span>
           </div>
         </div>
 

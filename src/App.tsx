@@ -20,6 +20,11 @@ interface Patient {
   primary_doctor_id: string
   chief_complaint: string
   ecg_result: string
+  troponin_t_level?: number | null
+  history_score?: number | null
+  risk_factors_count?: number | null
+  latest_severity_class?: string | null
+  has_lesion?: boolean | null
 }
 
 interface BookmarkItem {
