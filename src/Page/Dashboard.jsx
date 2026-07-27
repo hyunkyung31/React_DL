@@ -820,9 +820,6 @@ import {
 import angioImage from '../assets/angio_sample.png'
 import Xai_visualization from '../Components/Xai_visualization'
 import Mace_risk from '../Components/Mace_risk'
-import ImpressionTemplate from '../Components/ImpressionTemplate'
-import FindingChecklist from '../Components/FindingChecklist'
-import EmrConfirmPanel from '../Components/EmrConfirmPanel'
 import Home from './Home'
 
 // ==========================================
@@ -944,12 +941,6 @@ export default function Dashboard({
   const [heatmapOpacity, setHeatmapOpacity] = useState(50)
   const [confidenceThreshold, setConfidenceThreshold] = useState(50)
 
-  // EMR / impression panel state (from bin)
-  const [selectedVessels, setSelectedVessels] = useState([])
-  const [pciNeeded, setPciNeeded] = useState(null)
-  const [aiImpressionText, setAiImpressionText] = useState('')
-  const [canvasDrawMode, setCanvasDrawMode] = useState('none')
-  
   // 모바일 반응형 사이드바 토글 상태
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
 
@@ -1722,28 +1713,6 @@ export default function Dashboard({
 
                 <div className="mt-4">
                   <Mace_risk />
-                </div>
-
-                <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-4 shadow-2xl">
-                  <FindingChecklist 
-                    selectedVessels={selectedVessels}
-                    setSelectedVessels={setSelectedVessels}
-                    pciNeeded={pciNeeded}
-                    setPciNeeded={setPciNeeded}
-                    onGenerateImpression={(text) => setAiImpressionText(text)}
-                    onCanvasDrawMode={(mode) => setCanvasDrawMode(mode)}
-                  />
-                </div>
-
-                <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-4 shadow-2xl">
-                  <ImpressionTemplate 
-                    externalImpression={aiImpressionText}
-                    onImpressionChange={(val) => setAiImpressionText(val)}
-                  />
-                </div>
-
-                <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-4 shadow-2xl">
-                  <EmrConfirmPanel />
                 </div>
               </div>
             </div>
