@@ -188,33 +188,6 @@ export default function Home({ displayName, patients = [], onNavigate, onSelectP
 
       </div>
 
-      {/* 하단 여백 채우기: 시스템 공지 및 AI 모델 상태 위젯 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="p-4 rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md shadow-xl flex items-start gap-3">
-          <div className="p-2.5 rounded-lg bg-blue-950 border border-blue-800 text-blue-400 mt-0.5">
-            <Bell size={18} />
-          </div>
-          <div className="space-y-1">
-            <h4 className="text-xs font-semibold text-white">공지사항 및 업데이트</h4>
-            <p className="text-xs text-gray-300 leading-relaxed">
-              혈관조영술 AI 진단 모델 v1.0 정기 업데이트가 완료되었습니다. XAI 히트맵 시각화 정확도가 향상되었습니다.
-            </p>
-          </div>
-        </div>
-
-        <div className="p-4 rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md shadow-xl flex items-start gap-3">
-          <div className="p-2.5 rounded-lg bg-emerald-950 border border-emerald-800 text-emerald-400 mt-0.5">
-            <CheckCircle2 size={18} />
-          </div>
-          <div className="space-y-1">
-            <h4 className="text-xs font-semibold text-white">시스템 인프라 상태</h4>
-            <p className="text-xs text-gray-300 leading-relaxed">
-              AI 분석 서버 및 백엔드 데이터베이스 연결이 안정적으로 유지되고 있습니다. (Latency: 14ms)
-            </p>
-          </div>
-        </div>
-      </div>
-
     </div>
   )
 }
