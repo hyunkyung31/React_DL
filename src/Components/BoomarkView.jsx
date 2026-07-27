@@ -2,6 +2,22 @@ import { useState, useEffect } from 'react';
 import { Bookmark, Trash2, ExternalLink, Search, X } from 'lucide-react';
 import { fetchAuthBlobUrl } from '../utils/authMedia';
 
+function resolveBookmarkRawUrl(item) {
+  if (!item) return '';
+  return (
+    item.snapshotUrl ||
+    item.snapshot_url ||
+    item.snapshotPath ||
+    item.snapshot_path ||
+    item.url ||
+    item.image_url ||
+    item.imageUrl ||
+    item.file_url ||
+    item.key_frame_url ||
+    ''
+  );
+}
+
 export default function BookmarkView({ bookmarks = [], onSelectBookmark, onDeleteBookmark }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedItem, setSelectedItem] = useState(null);
@@ -20,27 +36,12 @@ export default function BookmarkView({ bookmarks = [], onSelectBookmark, onDelet
         return;
       }
 
-      console.log('현재 선택된 북마크 상세 데이터:', selectedItem);
-
-      // 1. 기존 스냅샷 경로 탐색
-      let rawUrl = 
-        selectedItem.snapshotUrl || 
-        selectedItem.snapshotPath || 
-        selectedItem.url || 
-        selectedItem.image_url || 
-        selectedItem.imageUrl || 
-        selectedItem.file_url || 
-        selectedItem.key_frame_url;
-
-      // 2. 💡 스냅샷 경로가 없을 경우 환자 ID와 프레임 번호를 조합하여 대체 API 경로 생성 (백엔드 엔드포인트 형식에 맞게 조절 가능)
-      if (!rawUrl && selectedItem.patientId) {
-        const frame = selectedItem.frameNumber || 1;
-        rawUrl = `/api/patients/${selectedItem.patientId}/snapshot?frame=${frame}`;
-      }
+      const rawUrl = resolveBookmarkRawUrl(selectedItem);
 
       if (!rawUrl) {
         setModalMediaUrl('');
         setIsModalLoading(false);
+        setModalImgError(false);
         return;
       }
 
@@ -48,6 +49,7 @@ export default function BookmarkView({ bookmarks = [], onSelectBookmark, onDelet
       setModalImgError(false);
 
       try {
+        // data: URL(캔버스 캡처)은 fetch 없이 바로 표시
         objectUrl = await fetchAuthBlobUrl(rawUrl);
         if (cancelled) return;
         setModalMediaUrl(objectUrl);
@@ -64,13 +66,15 @@ export default function BookmarkView({ bookmarks = [], onSelectBookmark, onDelet
 
     return () => {
       cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      if (objectUrl && String(objectUrl).startsWith('blob:')) {
+        URL.revokeObjectURL(objectUrl);
+      }
     };
   }, [selectedItem]);
 
-  const filteredBookmarks = bookmarks.filter(item => 
+  const filteredBookmarks = bookmarks.filter(item =>
     (item.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (item.patientId || '').includes(searchTerm)
+    String(item.patientId || item.patient_id || '').includes(searchTerm)
   );
 
   return (
@@ -84,7 +88,7 @@ export default function BookmarkView({ bookmarks = [], onSelectBookmark, onDelet
 
       <div className="relative mb-3">
         <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
-        <input 
+        <input
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
@@ -100,7 +104,7 @@ export default function BookmarkView({ bookmarks = [], onSelectBookmark, onDelet
           </div>
         ) : (
           filteredBookmarks.map((item) => (
-            <div 
+            <div
               key={item.id || item.patientId}
               onClick={() => setSelectedItem(item)}
               className="p-3 bg-gray-800/50 hover:bg-gray-800 border border-gray-800 rounded-lg transition-all flex flex-col gap-1.5 cursor-pointer"
@@ -108,7 +112,7 @@ export default function BookmarkView({ bookmarks = [], onSelectBookmark, onDelet
               <div className="flex justify-between items-center">
                 <span className="font-semibold text-white text-sm">{item.title || '제목 없음'}</span>
                 <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                  <button 
+                  <button
                     onClick={() => {
                       setSelectedItem(item);
                       if (onSelectBookmark) onSelectBookmark(item);
@@ -118,7 +122,7 @@ export default function BookmarkView({ bookmarks = [], onSelectBookmark, onDelet
                   >
                     <ExternalLink size={14} />
                   </button>
-                  <button 
+                  <button
                     onClick={() => onDeleteBookmark && onDeleteBookmark(item.id)}
                     className="p-1 text-gray-400 hover:text-red-400"
                     title="삭제"
@@ -127,8 +131,10 @@ export default function BookmarkView({ bookmarks = [], onSelectBookmark, onDelet
                   </button>
                 </div>
               </div>
-              {item.patientId && (
-                <span className="text-[11px] text-gray-400 font-mono">환자 ID: {item.patientId}</span>
+              {(item.patientId || item.patient_id) && (
+                <span className="text-[11px] text-gray-400 font-mono">
+                  환자 ID: {item.patientId || item.patient_id}
+                </span>
               )}
               {item.note && (
                 <p className="text-xs text-gray-300 bg-gray-900/50 p-2 rounded mt-1">
@@ -145,7 +151,7 @@ export default function BookmarkView({ bookmarks = [], onSelectBookmark, onDelet
           <div className="bg-gray-900 border border-blue-800/60 rounded-xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col">
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-gray-900/90">
               <h3 className="text-sm font-bold text-white truncate">{selectedItem.title}</h3>
-              <button 
+              <button
                 onClick={() => setSelectedItem(null)}
                 className="p-1 text-gray-400 hover:text-white rounded bg-gray-800 border border-gray-700"
               >
@@ -157,23 +163,27 @@ export default function BookmarkView({ bookmarks = [], onSelectBookmark, onDelet
               {isModalLoading ? (
                 <div className="text-xs text-gray-400 py-8">미디어를 불러오는 중...</div>
               ) : modalMediaUrl && !modalImgError ? (
-                <img 
-                  src={modalMediaUrl} 
-                  alt={selectedItem.title} 
+                <img
+                  src={modalMediaUrl}
+                  alt={selectedItem.title}
                   className="max-h-[50vh] object-contain rounded-lg border border-gray-800"
                   onError={() => setModalImgError(true)}
                 />
               ) : (
                 <div className="text-xs text-gray-400 py-8 text-center space-y-1">
                   <p className="text-sm text-gray-300">표시할 미디어 파일이 없습니다.</p>
-                  <p className="text-xs text-gray-500">(서버에 스냅샷 데이터(snapshotUrl)가 존재하지 않습니다.)</p>
+                  <p className="text-xs text-gray-500">북마크에 저장된 스냅샷이 없습니다. AI 진단 화면에서 다시 북마크를 추가해 주세요.</p>
                 </div>
               )}
             </div>
 
             <div className="px-4 py-3 border-t border-gray-800 bg-gray-900 flex justify-between items-center text-xs text-gray-400">
-              <span>{selectedItem.patientId ? `환자 ID: ${selectedItem.patientId}` : ''}</span>
-              <button 
+              <span>
+                {(selectedItem.patientId || selectedItem.patient_id)
+                  ? `환자 ID: ${selectedItem.patientId || selectedItem.patient_id}`
+                  : ''}
+              </span>
+              <button
                 onClick={() => setSelectedItem(null)}
                 className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-500 font-medium transition-colors"
               >

@@ -55,6 +55,11 @@ export default function EmrConfirmPanel({
         })
       }
 
+      // 로컬 결과 보고서 저장 등 (yuri) — API 성공 후에만
+      if (typeof onConfirm === 'function') {
+        onConfirm()
+      }
+
       setIsSignedOff(true)
       alert('최종 판독 확정 및 EMR 전송이 완료되었습니다.')
     } catch (error) {
@@ -79,14 +84,13 @@ export default function EmrConfirmPanel({
 
   return (
     <div className="space-y-3">
-      {/* 상태 영역 */}
       <div className="rounded-lg border border-gray-700 bg-gray-800/80 p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
               <FileCheck2
                 size={17}
-                className={ isSignedOff ? 'text-emerald-400' : 'text-blue-400' }
+                className={isSignedOff ? 'text-emerald-400' : 'text-blue-400'}
               />
 
               <span className="text-sm font-semibold text-white">
@@ -102,13 +106,14 @@ export default function EmrConfirmPanel({
           <span
             className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold ${
               isSignedOff
-                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/40 bg-amber-500/10 text-amber-300'}`}
+                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                : 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+            }`}
           >
             {isSignedOff ? '확정 완료 (Signed-off)' : '미확정 (Draft)'}
           </span>
         </div>
 
-        {/* 상태 스위치 */}
         <div className="mt-4 flex items-center justify-between rounded-lg border border-gray-700 bg-gray-950/50 px-3 py-2.5">
           <div>
             <p className="text-xs font-medium text-gray-200">
@@ -125,17 +130,16 @@ export default function EmrConfirmPanel({
             aria-checked={isSignedOff}
             aria-label={
               isSignedOff
-                ? '최종 판독 확정 완료' : '최종 판독 미확정'
+                ? '최종 판독 확정 완료'
+                : '최종 판독 미확정'
             }
             className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors duration-200 ${
-              isSignedOff
-                ? 'bg-emerald-500' : 'bg-gray-600'
+              isSignedOff ? 'bg-emerald-500' : 'bg-gray-600'
             }`}
           >
             <span
               className={`block h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 ${
-                isSignedOff
-                  ? 'translate-x-5' : 'translate-x-0'
+                isSignedOff ? 'translate-x-5' : 'translate-x-0'
               }`}
             />
           </div>
@@ -148,28 +152,28 @@ export default function EmrConfirmPanel({
         )}
       </div>
 
-      {/* 확정 또는 초기화 버튼 */}
       <div className="w-full min-w-0">
         {isSignedOff ? (
           <button
             type="button"
             onClick={handleReset}
-            className="box-border flex w-full min-w-0 items-center justify-center gap-2 rounded-lg border border-gray-600 bg-gray-800 px-3 py-2.5 text-sm font-semibold text-gray-200 transition-colors hover:bg-gray-700">
+            className="box-border flex w-full min-w-0 items-center justify-center gap-2 rounded-lg border border-gray-600 bg-gray-800 px-3 py-2.5 text-sm font-semibold text-gray-200 transition-colors hover:bg-gray-700"
+          >
             <Pencil size={16} />
             <span>판독 수정하기</span>
           </button>
         ) : (
           <button
             type="button"
-            onClick={onConfirm}
-            // disabled={
-            //   isSubmitting || !hasImpression
-            // }
-            className="box-border flex w-full min-w-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50">
+            onClick={handleConfirm}
+            disabled={isSubmitting || !hasImpression}
+            className="box-border flex w-full min-w-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
             <CheckCircle2 size={16} />
 
             {isSubmitting
-              ? 'EMR 전송 중...' : '최종 진단 확정 및 EMR 전송'}
+              ? 'EMR 전송 중...'
+              : '최종 진단 확정 및 EMR 전송'}
           </button>
         )}
       </div>

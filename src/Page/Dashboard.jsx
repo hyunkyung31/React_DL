@@ -240,13 +240,10 @@ export default function Dashboard({
     } catch (e) {}
   }, [savedReports])
 
-  // 💡 [추가] 최종 진단 확정 및 EMR 전송 핸들러
+  // EMR 성공 후 호출: 로컬 결과 보고서 저장 (알림은 EmrConfirmPanel에서 1회)
   const handleConfirmAndSave = () => {
     const targetPatient = selectedDiagPatient || selectedPatient
-    if (!targetPatient) {
-      alert("선택된 환자가 없습니다. 환자 목록에서 환자를 먼저 선택해 주세요.")
-      return
-    }
+    if (!targetPatient) return
 
     const currentPatientData = {
       ...targetPatient,
@@ -261,8 +258,6 @@ export default function Dashboard({
       }
       return [currentPatientData, ...prev]
     })
-
-    alert("진단이 확정되어 결과 보고서에 저장되었습니다!")
   }
 
   const [showHeatmap, setShowHeatmap] = useState(true)
@@ -275,6 +270,7 @@ export default function Dashboard({
   const heatmapCanvasRef = useRef(null)
   const boundingBoxCanvasRef = useRef(null)
   const videoRef = useRef(null)
+  const sidebarSearchTimerRef = useRef(null)
   
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [sidebarSearch, setSidebarSearch] = useState('')
@@ -495,38 +491,67 @@ export default function Dashboard({
     }
   }
 
-  const handleSidebarSearchChange = (e) => {
-    const keyword = e.target.value
-    setSidebarSearch(keyword)
-    
-    const trimmed = keyword.trim().toLowerCase()
+  const runSidebarPatientSearch = async (keyword) => {
+    const trimmed = (keyword || '').trim()
     if (!trimmed) {
       setSearchResults([])
       setIsSearchDropdownOpen(false)
       return
     }
-    const results = patientList.filter(p => 
-      (p.patient_name && p.patient_name.toLowerCase().includes(trimmed)) || 
-      (p.patient_id && String(p.patient_id).toLowerCase().includes(trimmed))
-    )
-    setSearchResults(results)
-    setIsSearchDropdownOpen(true)
+
+    try {
+      const accessToken = localStorage.getItem('access')
+      const response = await axios.get('http://34.80.83.7:8000/api/patients/search/', {
+        params: { q: trimmed },
+        headers: {
+          Authorization: accessToken ? `Bearer ${accessToken}` : '',
+        },
+      })
+      const data = response.data
+      const results = Array.isArray(data)
+        ? data
+        : (Array.isArray(data?.results) ? data.results : [])
+      setSearchResults(results)
+      setIsSearchDropdownOpen(true)
+    } catch (error) {
+      console.error('환자 검색 실패, 로컬 목록으로 폴백:', error)
+      const lower = trimmed.toLowerCase()
+      const results = patientList.filter(p =>
+        (p.patient_name && p.patient_name.toLowerCase().includes(lower)) ||
+        (p.patient_id && String(p.patient_id).toLowerCase().includes(lower))
+      )
+      setSearchResults(results)
+      setIsSearchDropdownOpen(true)
+    }
+  }
+
+  const handleSidebarSearchChange = (e) => {
+    const keyword = e.target.value
+    setSidebarSearch(keyword)
+
+    if (sidebarSearchTimerRef.current) {
+      clearTimeout(sidebarSearchTimerRef.current)
+    }
+
+    const trimmed = keyword.trim()
+    if (!trimmed) {
+      setSearchResults([])
+      setIsSearchDropdownOpen(false)
+      return
+    }
+
+    sidebarSearchTimerRef.current = setTimeout(() => {
+      runSidebarPatientSearch(trimmed)
+    }, 300)
   }
 
   const handleSidebarSearchKeyDown = (e) => {
     if (e.key === 'Enter') {
-      const keyword = sidebarSearch.trim()
-      if (!keyword) {
-        setSearchResults([])
-        setIsSearchDropdownOpen(false)
-        return
+      e.preventDefault()
+      if (sidebarSearchTimerRef.current) {
+        clearTimeout(sidebarSearchTimerRef.current)
       }
-      const results = patientList.filter(p => 
-        (p.patient_name && p.patient_name.toLowerCase().includes(keyword.toLowerCase())) || 
-        (p.patient_id && String(p.patient_id).toLowerCase().includes(keyword.toLowerCase()))
-      )
-      setSearchResults(results)
-      setIsSearchDropdownOpen(true)
+      runSidebarPatientSearch(sidebarSearch)
     }
   }
 
@@ -682,12 +707,12 @@ export default function Dashboard({
         <aside className={`
           absolute md:relative inset-y-0 left-0 z-40 
           w-56 border-r border-blue-800/40 bg-gray-900/95 md:bg-gray-900/65 backdrop-blur-md 
-          flex flex-col justify-between p-2.5 shrink-0 overflow-y-hidden
+          flex flex-col justify-between p-2.5 shrink-0 overflow-visible
           transform transition-transform duration-300 ease-in-out
           ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         `}>
-          <div className="overflow-y-auto pr-0.5">
-            <div className="mb-3 relative">
+          <div className="flex-1 min-h-0 flex flex-col pr-0.5 overflow-visible">
+            <div className="mb-3 relative z-50 shrink-0">
               <label className="text-[11px] font-semibold text-gray-300">전체 환자 빠른 검색</label>
               <input 
                 type="text" 
@@ -699,7 +724,7 @@ export default function Dashboard({
               />
 
               {isSearchDropdownOpen && searchResults.length > 0 && (
-                <div className="absolute left-0 right-0 mt-1 bg-gray-900 border border-blue-800/60 rounded-lg shadow-2xl z-50 max-h-52 overflow-y-auto backdrop-blur-xl">
+                <div className="absolute left-0 right-0 mt-1 bg-gray-900 border border-blue-800/60 rounded-lg shadow-2xl z-[100] max-h-52 overflow-y-auto backdrop-blur-xl">
                   <div className="p-1.5 text-[11px] text-gray-300 border-b border-blue-800/40 flex justify-between items-center">
                     <span>검색 결과 ({searchResults.length})</span>
                     <button onClick={() => setIsSearchDropdownOpen(false)} className="text-gray-400 hover:text-white">✕</button>
@@ -729,7 +754,7 @@ export default function Dashboard({
               )}
             </div>
 
-            <nav className="space-y-1">
+            <nav className="space-y-1 overflow-y-auto flex-1 min-h-0 pr-0.5">
               <button onClick={() => { setCurrentMenu('dashboard'); setSelectedPatient(null); }} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs transition-all ${currentMenu === 'dashboard' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-lg' : 'text-gray-300 hover:bg-blue-900/30'}`}>
                 <LayoutDashboard size={14} /> 대시보드 홈
               </button>
