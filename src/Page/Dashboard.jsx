@@ -4,6 +4,7 @@ import PatientDetail from './Patient_Detail'
 import Main_viewer from '../Components/Main_viewer'
 import ConsultationView from '../Components/Consultation_View'
 import BookmarkView from '../Components/BoomarkView' 
+import PatientReportView from '../Components/Patient_ReportView'
 import { 
   Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, 
   Trash2, Plus, Volume2, Download, FileText, Image as ImageIcon, Bookmark,
@@ -17,7 +18,7 @@ import Mace_risk from "../Components/Mace_risk"
 import NotificationBell from '../Components/Notification_bell'
 
 // ==========================================
-// [희욱 파트] 신규 컴포넌트 3종 Import
+// 신규 컴포넌트 Import
 // ==========================================
 import ImpressionTemplate from '../Components/ImpressionTemplate'
 import FindingChecklist from '../Components/FindingChecklist'
@@ -76,10 +77,10 @@ export function PatientManagement({ patients, errorMessage, onSelectPatient }) {
   return (
     <div className="flex-1 p-6 text-gray-100 overflow-y-auto" style={{ backgroundColor: '#060B18' }}>
       <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 p-6 rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md shadow-2xl">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 p-6 rounded-xl border border-blue-800/40 bg-gray-900/65 backdrop-blur-md shadow-2xl">
           <div>
-            <h2 className="text-xl font-bold text-white tracking-wide">담당 환자 목록 관리</h2>
-            <p className="text-xs text-gray-300 mt-1">등록된 환자를 검색하고 임상 상태를 확인하세요.</p>
+            <h2 className="text-xl font-bold text-white tracking-wide">환자 목록 관리</h2>
+            <p className="text-xs text-gray-300 mt-1">전체 등록된 환자를 검색하고 임상 상태를 확인하세요.</p>
           </div>
           <div className="flex items-center space-x-2">
             <select 
@@ -103,7 +104,7 @@ export function PatientManagement({ patients, errorMessage, onSelectPatient }) {
 
         {errorMessage && <p className="text-red-400 font-semibold">{errorMessage}</p>}
 
-        <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md overflow-hidden shadow-2xl">
+        <div className="rounded-xl border border-blue-800/40 bg-gray-900/65 backdrop-blur-md overflow-hidden shadow-2xl">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-blue-950/50 text-gray-300 text-xs uppercase tracking-wider border-b border-blue-800/40">
@@ -215,13 +216,49 @@ export default function Dashboard({
   onDeleteBookmark   
 }) {
 
-  const [currentMenu, setCurrentMenu] = useState('ai-diag')
+  const [currentMenu, setCurrentMenu] = useState('dashboard')
   const [selectedPatient, setSelectedPatient] = useState(null)
   const [selectedDiagPatient, setSelectedDiagPatient] = useState(null)
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false)
-  const [patientList, setPatientList] = useState(patients)
+  const [patientList, setPatientList] = useState([])
   const [modalSearchKeyword, setModalSearchKeyword] = useState('')
   const [isPatientLoading, setIsPatientLoading] = useState(false)
+
+  // 💡 [추가] 확정된 보고서 리스트 상태 (localStorage 연동으로 새로고침해도 유지)
+  const [savedReports, setSavedReports] = useState(() => {
+    try {
+      const saved = localStorage.getItem('saved_patient_reports')
+      return saved ? JSON.parse(saved) : []
+    } catch (e) {
+      return []
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('saved_patient_reports', JSON.stringify(savedReports))
+    } catch (e) {}
+  }, [savedReports])
+
+  // EMR 성공 후 호출: 로컬 결과 보고서 저장 (알림은 EmrConfirmPanel에서 1회)
+  const handleConfirmAndSave = () => {
+    const targetPatient = selectedDiagPatient || selectedPatient
+    if (!targetPatient) return
+
+    const currentPatientData = {
+      ...targetPatient,
+      clinicalReport: aiImpressionText || targetPatient.clinical_report || "작성된 소견 없음",
+      confirmedAt: new Date().toLocaleString(),
+    }
+
+    setSavedReports(prev => {
+      const exists = prev.some(p => String(p.patient_id) === String(currentPatientData.patient_id))
+      if (exists) {
+        return prev.map(p => String(p.patient_id) === String(currentPatientData.patient_id) ? currentPatientData : p)
+      }
+      return [currentPatientData, ...prev]
+    })
+  }
 
   const [showHeatmap, setShowHeatmap] = useState(true)
   const [showBoundingBox, setShowBoundingBox] = useState(true)
@@ -233,6 +270,7 @@ export default function Dashboard({
   const heatmapCanvasRef = useRef(null)
   const boundingBoxCanvasRef = useRef(null)
   const videoRef = useRef(null)
+  const sidebarSearchTimerRef = useRef(null)
   
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [sidebarSearch, setSidebarSearch] = useState('')
@@ -269,13 +307,9 @@ export default function Dashboard({
   const [canvasDrawMode, setCanvasDrawMode] = useState(null)
   const [userAnnotations, setUserAnnotations] = useState([])
 
-  // 환자 목록 동기화
+  // 전체 환자 목록 서버 연동 (담당 환자 외 전체 환자 포함)
   useEffect(() => {
-    if (patients && patients.length > 0) {
-      setPatientList(patients)
-      return
-    }
-    const fetchPatients = async () => {
+    const fetchAllPatients = async () => {
       setIsPatientLoading(true)
       try {
         const accessToken = localStorage.getItem('access')
@@ -289,14 +323,19 @@ export default function Dashboard({
           setPatientList(data)
         } else if (data && Array.isArray(data.results)) {
           setPatientList(data.results)
+        } else if (patients && patients.length > 0) {
+          setPatientList(patients)
         }
       } catch (error) {
-        console.error('환자 목록 불러오기 실패:', error)
+        console.error('전체 환자 목록 불러오기 실패:', error)
+        if (patients && patients.length > 0) {
+          setPatientList(patients)
+        }
       } finally {
         setIsPatientLoading(false)
       }
     }
-    fetchPatients()
+    fetchAllPatients()
   }, [patients])
 
   // 환자 선택 시 DICOM/이미지 연동 로직
@@ -319,7 +358,7 @@ export default function Dashboard({
         if (!res.ok) throw new Error('patient detail failed')
 
         const data = await res.json()
-        const imageUrl = data.examinations?.[0]?.key_frame_url || data.key_frame_url || data.image_url
+        const imageUrl = data.examinations?.[0]?.key_frame_url || data.key_frame_url || data.image_url || target.image_url || target.file_url
 
         if (!imageUrl) {
           setAiFileUrl(null)
@@ -398,6 +437,34 @@ export default function Dashboard({
           ]
         : []
 
+    let capturedSnapshotUrl = null;
+    const videoElement = document.querySelector('video'); 
+    const canvasElement = document.querySelector('canvas');
+
+    if (canvasElement) {
+      try {
+        capturedSnapshotUrl = canvasElement.toDataURL('image/png');
+      } catch (e) {
+        console.error('캔버스 캡처 실패:', e);
+      }
+    } else if (videoElement) {
+      try {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = videoElement.videoWidth || 640;
+        tempCanvas.height = videoElement.videoHeight || 480;
+        const ctx = tempCanvas.getContext('2d');
+        ctx.drawImage(videoElement, 0, 0, tempCanvas.width, tempCanvas.height);
+        capturedSnapshotUrl = tempCanvas.toDataURL('image/png');
+      } catch (e) {
+        console.error('비디오 캡처 실패:', e);
+      }
+    }
+
+    // cross-origin 캔버스 실패 시 현재 뷰어 이미지 URL로 폴백
+    if (!capturedSnapshotUrl && aiFileUrl) {
+      capturedSnapshotUrl = aiFileUrl;
+    }
+
     onAddBookmark({
       title: `프레임 ${currentFrame} 분석 지점`,
       patientId: patientId,
@@ -405,13 +472,14 @@ export default function Dashboard({
       frameNumber: currentFrame,
       examId: null,
       bboxData: bboxFromAi,
+      snapshotUrl: capturedSnapshotUrl,
     })
   }
 
   const handleSelectPatient = (patient) => {
     setSelectedPatient(patient)
     setSelectedDiagPatient(patient)
-    setCurrentMenu('ai-diag')
+    setCurrentMenu('patient-detail')
     setIsSearchDropdownOpen(false)
     setSidebarSearch('')
     setIsMobileSidebarOpen(false)
@@ -428,20 +496,67 @@ export default function Dashboard({
     }
   }
 
-  const handleSidebarSearchKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      const keyword = sidebarSearch.trim()
-      if (!keyword) {
-        setSearchResults([])
-        setIsSearchDropdownOpen(false)
-        return
-      }
-      const results = patientList.filter(p => 
-        (p.patient_name && p.patient_name.toLowerCase().includes(keyword.toLowerCase())) || 
-        (p.patient_id && String(p.patient_id).toLowerCase().includes(keyword.toLowerCase()))
+  const runSidebarPatientSearch = async (keyword) => {
+    const trimmed = (keyword || '').trim()
+    if (!trimmed) {
+      setSearchResults([])
+      setIsSearchDropdownOpen(false)
+      return
+    }
+
+    try {
+      const accessToken = localStorage.getItem('access')
+      const response = await axios.get('http://34.80.83.7:8000/api/patients/search/', {
+        params: { q: trimmed },
+        headers: {
+          Authorization: accessToken ? `Bearer ${accessToken}` : '',
+        },
+      })
+      const data = response.data
+      const results = Array.isArray(data)
+        ? data
+        : (Array.isArray(data?.results) ? data.results : [])
+      setSearchResults(results)
+      setIsSearchDropdownOpen(true)
+    } catch (error) {
+      console.error('환자 검색 실패, 로컬 목록으로 폴백:', error)
+      const lower = trimmed.toLowerCase()
+      const results = patientList.filter(p =>
+        (p.patient_name && p.patient_name.toLowerCase().includes(lower)) ||
+        (p.patient_id && String(p.patient_id).toLowerCase().includes(lower))
       )
       setSearchResults(results)
       setIsSearchDropdownOpen(true)
+    }
+  }
+
+  const handleSidebarSearchChange = (e) => {
+    const keyword = e.target.value
+    setSidebarSearch(keyword)
+
+    if (sidebarSearchTimerRef.current) {
+      clearTimeout(sidebarSearchTimerRef.current)
+    }
+
+    const trimmed = keyword.trim()
+    if (!trimmed) {
+      setSearchResults([])
+      setIsSearchDropdownOpen(false)
+      return
+    }
+
+    sidebarSearchTimerRef.current = setTimeout(() => {
+      runSidebarPatientSearch(trimmed)
+    }, 300)
+  }
+
+  const handleSidebarSearchKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (sidebarSearchTimerRef.current) {
+        clearTimeout(sidebarSearchTimerRef.current)
+      }
+      runSidebarPatientSearch(sidebarSearch)
     }
   }
 
@@ -546,14 +661,12 @@ export default function Dashboard({
     return name.toLowerCase().includes(kw) || String(id).toLowerCase().includes(kw)
   })
 
-  // 동적 MACE 위험도 계산 로직 (협착 개수, 환자 나이, 고혈압/당뇨 여부 기반 수식 계산)
   const activePatient = selectedDiagPatient || selectedPatient
   const currentStenosisCount = aiResult?.bounding_boxes?.length ?? activePatient?.stenosis_count ?? 1
   const currentAge = activePatient?.age ?? 67
   const hasHypertensionVal = activePatient?.has_hypertension ?? true
   const hasDiabetesVal = activePatient?.has_diabetes ?? true
 
-  // 입력 요인에 따른 동적 MACE 위험도 계산 공식 적용
   const calculatedMaceRisk = Math.min(
     100,
     Math.max(
@@ -565,18 +678,8 @@ export default function Dashboard({
   const currentHypertension = hasHypertensionVal ? '있음' : '없음'
   const currentDiabetes = hasDiabetesVal ? '있음' : '없음'
 
-  // MACE 위험도 단계 결정 (낮음 / 중간 / 높음)
   const maceCategory = currentMaceRisk < 30 ? '낮음 위험' : currentMaceRisk < 70 ? '중간 위험' : '높음 위험'
   const maceCategoryColor = currentMaceRisk < 30 ? 'text-emerald-400' : currentMaceRisk < 70 ? 'text-amber-400' : 'text-red-400'
-
-  // 반원형 게이지 SVG 인디케이터 위치 계산
-  const maceAngle = (currentMaceRisk / 100) * 180 - 90
-  const maceRad = (maceAngle * Math.PI) / 180
-  const gaugeCx = 75
-  const gaugeCy = 70
-  const gaugeR = 52
-  const indicatorX = gaugeCx + gaugeR * Math.cos(maceRad)
-  const indicatorY = gaugeCy + gaugeR * Math.sin(maceRad)
 
   return (
     <div className="flex flex-col h-screen overflow-hidden text-gray-100" style={{ backgroundColor: '#060B18' }}>
@@ -608,51 +711,46 @@ export default function Dashboard({
         {/* 사이드바 */}
         <aside className={`
           absolute md:relative inset-y-0 left-0 z-40 
-          w-56 border-r border-blue-800/40 bg-gray-900/95 md:bg-gray-900/60 backdrop-blur-md 
-          flex flex-col justify-between p-2.5 shrink-0 overflow-y-hidden
+          w-56 border-r border-blue-800/40 bg-gray-900/95 md:bg-gray-900/65 backdrop-blur-md 
+          flex flex-col justify-between p-2.5 shrink-0 overflow-visible
           transform transition-transform duration-300 ease-in-out
           ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         `}>
-          <div className="overflow-y-auto pr-0.5">
-            <div className="mb-3 relative">
+          <div className="flex-1 min-h-0 flex flex-col pr-0.5 overflow-visible">
+            <div className="mb-3 relative z-50 shrink-0">
               <label className="text-[11px] font-semibold text-gray-300">전체 환자 빠른 검색</label>
               <input 
                 type="text" 
                 placeholder="이름/ID 입력 후 Enter" 
                 value={sidebarSearch}
-                onChange={(e) => {
-                  setSidebarSearch(e.target.value)
-                  if (isSearchDropdownOpen) setIsSearchDropdownOpen(false)
-                }}
+                onChange={handleSidebarSearchChange}
                 onKeyDown={handleSidebarSearchKeyDown}
                 className="w-full mt-1 px-2 py-1 bg-gray-900 border border-blue-800/50 rounded text-xs text-white placeholder-gray-400 focus:outline-none focus:border-blue-400 shadow-inner"
               />
 
               {isSearchDropdownOpen && searchResults.length > 0 && (
-                <div className="absolute left-0 right-0 mt-1 bg-gray-900 border border-blue-800/60 rounded-lg shadow-2xl z-50 max-h-52 overflow-y-auto backdrop-blur-xl">
+                <div className="absolute left-0 right-0 mt-1 bg-gray-900 border border-blue-800/60 rounded-lg shadow-2xl z-[100] max-h-52 overflow-y-auto backdrop-blur-xl">
                   <div className="p-1.5 text-[11px] text-gray-300 border-b border-blue-800/40 flex justify-between items-center">
                     <span>검색 결과 ({searchResults.length})</span>
                     <button onClick={() => setIsSearchDropdownOpen(false)} className="text-gray-400 hover:text-white">✕</button>
                   </div>
                   {searchResults.map((patient) => {
-                    const isSelected = selectedDiagPatient?.patient_id === patient.patient_id
                     return (
                       <div 
                         key={patient.patient_id}
-                        onClick={() => handleToggleSelectPatient(patient)}
-                        className={`p-2 cursor-pointer border-b border-blue-900/30 last:border-none transition-colors flex items-center justify-between ${
-                          isSelected ? 'bg-blue-900/60 border-l-4 border-l-blue-400' : 'hover:bg-blue-900/30'
-                        }`}
+                        onClick={() => {
+                          handleSelectPatient(patient)
+                        }}
+                        className="p-2 cursor-pointer border-b border-blue-900/30 last:border-none transition-colors hover:bg-blue-900/30 flex items-center justify-between"
                       >
                         <div>
-                          <p className="text-xs font-medium text-white flex items-center gap-1">
+                          <p className="text-xs font-medium text-white">
                             {patient.patient_name}
-                            {isSelected && <CheckCircle2 size={12} className="text-blue-400 inline" />}
                           </p>
                           <p className="text-[10px] text-gray-300">ID: {patient.patient_id}</p>
                         </div>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isSelected ? 'bg-red-950 text-red-300 border border-red-800/60' : 'bg-blue-600 text-white'}`}>
-                          {isSelected ? '취소' : '선택'}
+                        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-blue-600 text-white">
+                          상세보기
                         </span>
                       </div>
                     )
@@ -661,7 +759,7 @@ export default function Dashboard({
               )}
             </div>
 
-            <nav className="space-y-1">
+            <nav className="space-y-1 overflow-y-auto flex-1 min-h-0 pr-0.5">
               <button onClick={() => { setCurrentMenu('dashboard'); setSelectedPatient(null); }} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs transition-all ${currentMenu === 'dashboard' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-lg' : 'text-gray-300 hover:bg-blue-900/30'}`}>
                 <LayoutDashboard size={14} /> 대시보드 홈
               </button>
@@ -676,6 +774,9 @@ export default function Dashboard({
               </button>
               <button onClick={() => { setCurrentMenu('bookmarks'); setSelectedPatient(null); }} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs transition-all ${currentMenu === 'bookmarks' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-lg' : 'text-gray-300 hover:bg-blue-900/30'}`}>
                 <Bookmark size={14} /> 북마크 관리
+              </button>
+              <button onClick={() => { setCurrentMenu('patient-report'); }} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs transition-all ${currentMenu === 'patient-report' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-lg' : 'text-gray-300 hover:bg-blue-900/30'}`}>
+                <FileText size={14} /> 환자별 결과 보고서
               </button>
             </nav>
           </div>
@@ -725,13 +826,24 @@ export default function Dashboard({
               onDeleteBookmark={onDeleteBookmark} 
               onSelectBookmark={(item) => console.log('선택된 북마크 항목:', item)} 
             />
+          ) : currentMenu === 'patient-report' ? (
+            <PatientReportView 
+              patient={selectedDiagPatient || selectedPatient} 
+              ecgImageUrl={selectedDiagPatient?.ecg_image_url || selectedPatient?.ecg_image_url} 
+              clinicalReport={aiImpressionText}
+              savedReports={savedReports} 
+              onSelectPatient={(p) => {
+                setSelectedDiagPatient(p)
+                setSelectedPatient(p)
+              }}
+            />
           ) : (
             <main className="flex-1 p-1.5 h-full overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-1.5" style={{ backgroundColor: '#060B18' }}>
               
               {/* [좌측 메인 뷰어 영역 - 6컬럼] */}
               <div className="lg:col-span-6 flex flex-col h-full space-y-1.5 overflow-hidden">
                 
-                {/* 환자 선택 및 업로드 바 (드래그 앤 드롭 영역 포함) */}
+                {/* 환자 선택 및 업로드 바 */}
                 <div 
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
@@ -740,7 +852,7 @@ export default function Dashboard({
                       handleFileUpload(e.dataTransfer.files[0])
                     }
                   }}
-                  className="rounded-lg border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-1.5 flex flex-col gap-1 shadow-xl shrink-0"
+                  className="rounded-lg border border-blue-800/40 bg-gray-900/65 backdrop-blur-md p-1.5 flex flex-col gap-1 shadow-xl shrink-0"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <button
@@ -818,7 +930,7 @@ export default function Dashboard({
               <div className="lg:col-span-3 flex flex-col h-full space-y-1.5 overflow-hidden">
                 
                 {/* AI 결과 패널 */}
-                <div className="flex-[0.55] flex flex-col rounded-lg border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-1.5 shadow-xl overflow-hidden">
+                <div className="flex-[0.55] flex flex-col rounded-lg border border-blue-800/40 bg-gray-900/65 backdrop-blur-md p-1.5 shadow-xl overflow-hidden">
                   <div className="border-b border-blue-800/40 pb-0.5 mb-1 shrink-0">
                     <h2 className="font-semibold text-[11px] text-white">AI 결과 패널</h2>
                   </div>
@@ -866,7 +978,7 @@ export default function Dashboard({
                 </div>
 
                 {/* XAI 시각화 영역 */}
-                <div className="flex-[1.75] flex flex-col rounded-lg border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-1.5 shadow-xl overflow-hidden">
+                <div className="flex-[1.75] flex flex-col rounded-lg border border-blue-800/40 bg-gray-900/65 backdrop-blur-md p-1.5 shadow-xl overflow-hidden">
                   <div className="flex-1 overflow-y-auto pr-0.5">
                     <Xai_visualization 
                         showHeatmap={showHeatmap}
@@ -886,7 +998,7 @@ export default function Dashboard({
                 </div>
 
                 {/* MACE 위험도 영역 */}
-                <div className="flex-[1.15] flex flex-col rounded-lg border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-1.5 shadow-xl overflow-hidden justify-between">
+                <div className="flex-[1.15] flex flex-col rounded-lg border border-blue-800/40 bg-gray-900/65 backdrop-blur-md p-1.5 shadow-xl overflow-hidden justify-between">
                   <div className="shrink-0 space-y-0.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1 text-white font-bold text-[10px]">
@@ -904,32 +1016,36 @@ export default function Dashboard({
 
                   <div className="bg-gray-950/60 border border-blue-900/40 rounded p-1 shrink-0 flex flex-col items-center relative">
                     <span className="text-[9px] font-semibold text-gray-300 mb-0.5">심혈관 사건 및 사망 위험도</span>
-                    <svg width="150" height="65" className="overflow-visible my-0.5">
-                      <defs>
-                        <linearGradient id="maceGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                          <stop offset="0%" stopColor="#10B981" />
-                          <stop offset="50%" stopColor="#F59E0B" />
-                          <stop offset="100%" stopColor="#EF4444" />
-                        </linearGradient>
-                      </defs>
-                      <path
-                        d="M 15 60 A 55 55 0 0 1 135 60"
-                        fill="none"
-                        stroke="url(#maceGradient)"
-                        strokeWidth="9"
-                        strokeLinecap="round"
-                      />
-                      <circle
-                        cx={indicatorX}
-                        cy={indicatorY + 10}
-                        r="4.5"
-                        fill="#FFFFFF"
-                        stroke="#1F2937"
-                        strokeWidth="2"
-                        className="transition-all duration-500"
-                      />
-                    </svg>
-                    <div className="text-center -mt-1 mb-0.5">
+                    
+                    <div className="relative w-[150px] h-[75px] my-0.5">
+                      <svg width="150" height="75" viewBox="0 0 150 75" className="overflow-visible">
+                        <defs>
+                          <linearGradient id="maceGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stopColor="#10B981" />
+                            <stop offset="50%" stopColor="#F59E0B" />
+                            <stop offset="100%" stopColor="#EF4444" />
+                          </linearGradient>
+                        </defs>
+                        <path
+                          d="M 20 65 A 55 55 0 0 1 130 65"
+                          fill="none"
+                          stroke="url(#maceGradient)"
+                          strokeWidth="9"
+                          strokeLinecap="round"
+                        />
+                        <circle
+                          cx={75 + 55 * Math.cos((((currentMaceRisk / 100) * 180 - 180) * Math.PI) / 180)}
+                          cy={65 + 55 * Math.sin((((currentMaceRisk / 100) * 180 - 180) * Math.PI) / 180)}
+                          r="5"
+                          fill="#FFFFFF"
+                          stroke="#1F2937"
+                          strokeWidth="2"
+                          className="transition-all duration-500"
+                        />
+                      </svg>
+                    </div>
+
+                    <div className="text-center mt-0.5 mb-0.5">
                       <span className="text-xs font-extrabold text-white">
                         {currentMaceRisk.toFixed(1)}%
                       </span>
@@ -970,9 +1086,9 @@ export default function Dashboard({
 
               </div>
 
-              {/* [우측 패널 영역 - 3컬럼 확장]: 판독 소견 박스 높이를 대폭 늘림 */}
+              {/* [우측 패널 영역 - 3컬럼 확장] */}
               <div className="lg:col-span-3 flex flex-col h-full space-y-1 overflow-hidden pr-0.5">
-                <div className="rounded-lg border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-1.5 shadow-xl shrink-0">
+                <div className="rounded-lg border border-blue-800/40 bg-gray-900/65 backdrop-blur-md p-1.5 shadow-xl shrink-0">
                   <FindingChecklist 
                     selectedVessels={selectedVessels}
                     setSelectedVessels={setSelectedVessels}
@@ -983,8 +1099,7 @@ export default function Dashboard({
                   />
                 </div>
 
-                {/* 최종 판독 문구 영역: flex 비중을 높여 (flex-[1.8]) 박스 크기를 넓게 확보 */}
-                <div className="rounded-lg border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-1.5 shadow-xl flex-[1.8] flex flex-col overflow-hidden">
+                <div className="rounded-lg border border-blue-800/40 bg-gray-900/65 backdrop-blur-md p-1.5 shadow-xl flex-[1.8] flex flex-col overflow-hidden">
                   <div className="flex-1 flex flex-col overflow-hidden">
                     <ImpressionTemplate 
                       externalImpression={aiImpressionText}
@@ -993,12 +1108,13 @@ export default function Dashboard({
                   </div>
                 </div>
 
-                <div className="rounded-lg border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-1.5 shadow-xl shrink-0">
+                <div className="rounded-lg border border-blue-800/40 bg-gray-900/65 backdrop-blur-md p-1.5 shadow-xl shrink-0">
                   <EmrConfirmPanel
                     impression={aiImpressionText}
                     selectedVessels={selectedVessels}
                     pciNeeded={pciNeeded}
                     patientId={selectedDiagPatient?.patient_id || selectedPatient?.patient_id}
+                    onConfirm={handleConfirmAndSave}
                   />
                 </div>
               </div>
@@ -1008,7 +1124,7 @@ export default function Dashboard({
         </div>
       </div>
 
-      {/* 환자 검색, 선택 모달 */}
+      {/* 전체 환자 검색 및 선택 모달 */}
       {isPatientModalOpen && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center backdrop-blur-sm">
           <div className="bg-gray-900 border border-blue-800/60 rounded-xl w-[550px] max-h-[85vh] flex flex-col shadow-2xl p-5 text-white">
@@ -1049,7 +1165,7 @@ export default function Dashboard({
 
             <div className="flex-1 overflow-y-auto space-y-2 pr-1 max-h-[50vh]">
               {isPatientLoading ? (
-                <p className="text-center text-xs text-gray-400 py-8">환자 목록을 불러오는 중...</p>
+                <p className="text-center text-xs text-gray-400 py-8">전체 환자 목록을 불러오는 중...</p>
               ) : filteredModalPatients.length > 0 ? (
                 filteredModalPatients.map((patient) => {
                   const isSelected = selectedDiagPatient?.patient_id === patient.patient_id

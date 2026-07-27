@@ -135,7 +135,7 @@ function Main_viewer({
                     context.font = 'bold 11px sans-serif'
                     context.fillText('Dr. Annotation', ann.x + 4, Math.max(ann.y - 4, 12))
                 } else if (ann.type === 'pen' && ann.path && ann.path.length > 0) {
-                    context.strokeStyle = '#10b981'
+                    context.strokeStyle = '#dd0202'
                     context.lineWidth = 3
                     context.lineCap = 'round'
                     context.beginPath()
