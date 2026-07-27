@@ -72,7 +72,7 @@ function Xai_visualization({
                   key={option.value}
                   type="button"
                   onClick={() => setOverlayMode(option.value)}
-                  className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-lg border px-2 py-3 text-xm transition-colors ${
+                  className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-lg border px-2 py-3 text-xs transition-colors ${
                     isSelected
                       ? 'border-blue-500 bg-blue-600 text-white'
                       : 'border-gray-700 bg-gray-800 text-gray-300 hover:border-gray-600 hover:bg-gray-700'
@@ -170,7 +170,7 @@ function Xai_visualization({
                ? `${confidenceScore}%` : '-'}
             </p>
 
-            <p className="mt-1 text-xm text-gray-400">
+            <p className="mt-1 text-xs text-gray-400">
               {confidenceScore != null
                 ? 'AI 판단 신뢰도' : '분석 결과 없음'}
             </p>
@@ -190,7 +190,7 @@ function Xai_visualization({
                 ? `${uncertaintyScore}%` : '-'}
             </p>
 
-            <p className="mt-1 text-xm text-gray-400">
+            <p className="mt-1 text-xs text-gray-400">
               {uncertaintyScore != null
                 ? '신뢰도 기반 보완값' : '분석 결과 없음'}
             </p>
