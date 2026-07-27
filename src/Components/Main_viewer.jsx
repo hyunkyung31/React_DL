@@ -10,6 +10,7 @@ function Main_viewer({
     patientData,
     overlayMode,
     confidenceThreshold,
+    aiFileUrl = null,
 }) {
     const [currentFrame, setCurrentFrame] = useState(125)
     const [isPlaying, setIsPlaying] = useState(false)
@@ -58,6 +59,11 @@ function Main_viewer({
         setUserAnnotations([])
         setActiveTool(null)
     }, [patientData])
+
+    // 부모에서 GCS key_frame / 업로드 URL이 바뀌면 다시 로드
+    useEffect(() => {
+        setIsImageLoaded(false)
+    }, [aiFileUrl])
 
     useEffect(() => {
         if (!isPlaying) return
@@ -383,7 +389,13 @@ function Main_viewer({
         return frames
     }
 
-    const currentDisplayImage = customImageUrl || patientData?.imageUrl || patientData?.url || angioImage
+    // Dashboard가 넘기는 aiFileUrl(환자 key_frame blob)을 매핑
+    const currentDisplayImage =
+        customImageUrl ||
+        aiFileUrl ||
+        patientData?.imageUrl ||
+        patientData?.url ||
+        angioImage
 
     return (
         <section
@@ -394,7 +406,9 @@ function Main_viewer({
             <div className="flex items-center justify-between border-b border-gray-800 px-3 py-2">
                 <div className="flex items-center gap-3">
                     <h2 className="text-sm font-semibold text-white">
-                        {patientData.name ? `${patientData.name} 영상 뷰어` : patientData.title}
+                        {patientData?.patient_name || patientData?.name
+                          ? `${patientData.patient_name || patientData.name} 영상 뷰어`
+                          : (patientData?.title || '영상 뷰어')}
                     </h2>
                     <select
                         value={selectedSeries}
@@ -524,7 +538,7 @@ function Main_viewer({
                 )}
 
                 <div className="absolute left-3 top-3 z-10 space-y-0.5 text-[11px] text-gray-300 pointer-events-none">
-                    <p>Patient ID : {patientData.patientId || patientData.id || '00012345'}</p>
+                    <p>Patient ID : {patientData?.patient_id || patientData?.patientId || patientData?.id || '00012345'}</p>
                     <p>Study Date : {patientData.date || '2026-07-25'}</p>
                 </div>
 
