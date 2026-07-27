@@ -9,8 +9,10 @@ import {
 function Xai_visualization({
     showHeatmap = true,
     setShowHeatmap,
-    showBoundingBox = true,
+    onHeatmapToggle,
+    showBoundingBox = false,
     setShowBoundingBox,
+    onBoundingBoxToggle,
     heatmapOpacity,
     setHeatmapOpacity,
     confidenceThreshold,
@@ -24,14 +26,14 @@ function Xai_visualization({
         label: 'Bounding Box',
         icon: Box,
         active: showBoundingBox,
-        onToggle: () => setShowBoundingBox?.((v) => !v),
+        onClick: onBoundingBoxToggle,
     },
     {
         value: 'heatmap',
         label: 'Heatmap',
         icon: Flame,
         active: showHeatmap,
-        onToggle: () => setShowHeatmap?.((v) => !v),
+        onClick: onHeatmapToggle,
     },
   ]
 
@@ -75,7 +77,7 @@ function Xai_visualization({
                 <button
                   key={option.value}
                   type="button"
-                  onClick={option.onToggle}
+                  onClick={option.onClick}
                   className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-lg border px-2 py-3 text-xs transition-colors ${
                     isSelected
                       ? 'border-blue-500 bg-blue-600 text-white'

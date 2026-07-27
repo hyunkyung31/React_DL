@@ -218,6 +218,7 @@ export default function Dashboard({
 
   const [currentMenu, setCurrentMenu] = useState('dashboard')
   const [selectedPatient, setSelectedPatient] = useState(null)
+  const [targetConsultationId, setTargetConsultationId] = useState(null)
   const [selectedDiagPatient, setSelectedDiagPatient] = useState(null)
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false)
   const [patientList, setPatientList] = useState([])
@@ -261,7 +262,7 @@ export default function Dashboard({
   }
 
   const [showHeatmap, setShowHeatmap] = useState(true)
-  const [showBoundingBox, setShowBoundingBox] = useState(true)
+  const [showBoundingBox, setShowBoundingBox] = useState(false)
   const [heatmapOpacity, setHeatmapOpacity] = useState(65)
   const [confidenceThreshold, setConfidenceThreshold] = useState(25)
   const [isViewerImageLoaded, setIsViewerImageLoaded] = useState(false)
@@ -270,6 +271,7 @@ export default function Dashboard({
   const heatmapCanvasRef = useRef(null)
   const boundingBoxCanvasRef = useRef(null)
   const videoRef = useRef(null)
+  const aiNoticeTimerRef = useRef(null)
   const sidebarSearchTimerRef = useRef(null)
   
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
@@ -289,13 +291,13 @@ export default function Dashboard({
   const [aiLoading, setAiLoading] = useState(false)
   const [aiResult, setAiResult] = useState(null)
   const [aiError, setAiError] = useState('')
+  const [aiVisualizationNotice, setAiVisualizationNotice] = useState('')
 
   const xaiData = useMemo(() => { return {
     showGradcam: aiResult?.show_gradcam ?? aiResult?.predicted_label === 'Stenosis',
     heatmapBase64: aiResult?.heatmap_base64 ?? null,
     overlayBase64: aiResult?.overlay_base64 ?? null,
-    boundingBoxes: aiResult?.bounding_boxes ?? aiResult?.boxes ?? [],
-  }
+    boundingBoxes: aiResult?.bounding_boxes ?? aiResult?.boxes ?? [],}
   }, [aiResult])
 
   const [scale, setScale] = useState(1)
@@ -395,6 +397,44 @@ export default function Dashboard({
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
   }, [selectedDiagPatient, selectedPatient])
+
+  const showAiVisualizationNotice = (message) => {
+    if (aiNoticeTimerRef.current) {
+      window.clearTimeout(aiNoticeTimerRef.current)
+    }
+
+    setAiVisualizationNotice(message)
+
+    aiNoticeTimerRef.current = window.setTimeout(() => {
+      setAiVisualizationNotice('')
+    }, 4000)
+  }
+  
+  // 히트맵 선택: 켜면 바운딩박스는 자동으로 끔
+  const handleHeatmapToggle = () => {
+    setShowHeatmap((prev) => {
+      const nextValue = !prev
+
+      if (nextValue) {
+        setShowBoundingBox(false)
+      }
+
+      return nextValue
+    })
+  }
+
+  // 바운딩박스 선택: 켜면 히트맵은 자동으로 끔
+  const handleBoundingBoxToggle = () => {
+    setShowBoundingBox((prev) => {
+      const nextValue = !prev
+
+      if (nextValue) {
+        setShowHeatmap(false)
+      }
+
+      return nextValue
+    })
+  }
 
   const handleFileUpload = (file) => {
     if (!file) return
@@ -565,6 +605,12 @@ export default function Dashboard({
       alert('Error: 등록된 이미지가 없습니다. Dicom파일이나 영상파일을 업로드 후 분석을 실행하세요.')
       return
     }
+    if (aiFileType === 'video') {
+      setAiError(
+        '영상 분석 API가 아직 Django에 연결되지 않았습니다. 현재는 이미지 분석만 가능합니다.'
+      )
+      return
+    }
     const access = localStorage.getItem('access')
     if (!access) {
       alert('로그인 토큰이 없습니다. 다시 로그인해 주세요.')
@@ -572,10 +618,15 @@ export default function Dashboard({
     }
     setAiLoading(true)
     setAiError('')
+    setAiVisualizationNotice('')
     setAiResult(null)
     try {
       const formData = new FormData()
       formData.append('file', aiFile)
+      
+      const analyzeUrl = aiFileType === 'video'
+        ? 'http://34.80.83.7:8000/api/ai/video-analyze/': 'http://34.80.83.7:8000/api/ai/image-analyze/'
+      
       const response = await fetch('http://34.80.83.7:8000/api/ai/image-analyze/', {
         method: 'POST',
         headers: {
@@ -592,45 +643,90 @@ export default function Dashboard({
         throw new Error(errorData?.detail || `AI 분석 요청 실패 (${response.status})`)
       }
       const data = await response.json()
+      console.log('통합 이미지 분석 API 원본 응답:', data)
       const classification = data.classification || data
       const detection = data.detection || {}
       const detections = detection.detections || data.detections || []
       const boundingBoxes = detections.map((det, index) => {
         const box = det.bbox || det.box || det
+
         const x1 = box.x1 ?? box.x ?? (box.xyxy ? box.xyxy[0] : 0)
         const y1 = box.y1 ?? box.y ?? (box.xyxy ? box.xyxy[1] : 0)
-        const x2 = box.x2 ?? ((box.x != null && box.width != null) ? box.x + box.width : (box.xyxy ? box.xyxy[2] : 0))
-        const y2 = box.y2 ?? ((box.y != null && box.height != null) ? box.y + box.height : (box.xyxy ? box.xyxy[3] : 0))
-        const norm = det.normalized_bbox
-        return {
-          id: det.detection_id || index + 1,
-          x: norm ? norm[0] * (detection.image_width || 1) : x1,
-          y: norm ? norm[1] * (detection.image_height || 1) : y1,
-          width: norm ? (norm[2] - norm[0]) * (detection.image_width || 1) : Math.max(0, x2 - x1),
-          height: norm ? (norm[3] - norm[1]) * (detection.image_height || 1) : Math.max(0, y2 - y1),
+        const x2 = box.x2 ?? (box.x != null && box.width != null ? box.x + box.width : box.xyxy ? box.xyxy[2] : 0)
+        const y2 = box.y2 ?? (box.y != null && box.height != null ? box.y + box.height : box.xyxy ? box.xyxy[3] : 0)
+
+        const normalizedBox = det.box_normalized ?? det.normalized_bbox ?? null
+
+        return {id: det.detection_id || index + 1,
+
+          x: normalizedBox ? normalizedBox.x1 * (detection.image_width || 1) : x1,
+          y: normalizedBox ? normalizedBox.y1 * (detection.image_height || 1) : y1,
+          width: normalizedBox ? normalizedBox.width * (detection.image_width || 1) : Math.max(0, x2 - x1),
+          height: normalizedBox ? normalizedBox.height * (detection.image_height || 1) : Math.max(0, y2 - y1),
           label: det.class_name || det.label || 'Stenosis',
           confidence: det.confidence ?? 0,
         }
       })
+
       console.log('[AI detect]', {
         detection_count: detections.length,
         mapped_boxes: boundingBoxes.length,
-        confidences: boundingBoxes.map((b) => b.confidence),
-        sizes: boundingBoxes.map((b) => ({ w: b.width, h: b.height })),
-        has_heatmap: Boolean(
-          classification.heatmap_base64
-          || classification.overlay_base64
-          || data.heatmap_base64
-          || data.overlay_base64
-        ),
+        confidences: boundingBoxes.map((box) => box.confidence),
+        sizes: boundingBoxes.map((box) => ({
+          w: box.width,
+          h: box.height,
+        })),
+        has_heatmap: Boolean(classification.heatmap_base64 || classification.overlay_base64 || data.heatmap_base64 || data.overlay_base64),
         show_gradcam: classification.show_gradcam ?? data.show_gradcam,
       })
-      const heatmapBase64 =
-        classification.heatmap_base64
-        ?? classification.overlay_base64
-        ?? data.heatmap_base64
-        ?? data.overlay_base64
-        ?? null
+
+      const heatmapBase64 = classification.heatmap_base64 ?? classification.overlay_base64 ?? data.heatmap_base64 ?? data.overlay_base64 ?? null
+
+      const predictedLabel = classification.predicted_label ?? data.predicted_label ?? ''
+
+      const isStenosis = String(predictedLabel).toLowerCase() === 'stenosis'
+
+      let visualizationNotice = ''
+
+      if (!isStenosis) {
+        visualizationNotice =
+          '협착 의심 부위가 탐지되지 않았습니다.'
+      } else if (boundingBoxes.length === 0) {
+        visualizationNotice =
+          '협착 가능성이 확인되었습니다. 위치 탐지 결과가 없어 Grad-CAM 히트맵만 표시합니다.'
+      } else {
+        const maximumBoxConfidence = Math.max(
+          ...boundingBoxes.map(
+            (box) =>
+              Number(box.confidence ?? 0) * 100
+          )
+        )
+
+        if (
+          maximumBoxConfidence <
+          confidenceThreshold
+        ) {
+          const adjustedThreshold = Math.max(
+            1,
+            Math.floor(maximumBoxConfidence)
+          )
+
+          setConfidenceThreshold(
+            adjustedThreshold
+          )
+
+          visualizationNotice =
+            `협착 의심 부위 ${boundingBoxes.length}건이 탐지되었습니다. ` +
+            `표시 기준을 ${adjustedThreshold}%로 자동 조정했습니다.`
+        } else {
+          visualizationNotice =
+            `협착 의심 부위 ${boundingBoxes.length}건이 탐지되었습니다.`
+        }
+      }
+
+      console.log('AI 시각화 안내문:', visualizationNotice)
+
+      showAiVisualizationNotice(visualizationNotice)
       setAiResult({
         ...data,
         ...classification,
@@ -661,6 +757,18 @@ export default function Dashboard({
     return name.toLowerCase().includes(kw) || String(id).toLowerCase().includes(kw)
   })
 
+  // 알림 클릭 시 해당 협진 화면으로 이동
+  const handleConsultationNotification = (consultationId) => {
+    console.log('알림에서 받은 협진 ID:', consultationId)
+    
+    if (!consultationId) return
+
+    setTargetConsultationId(Number(consultationId))
+    setCurrentMenu('consultation')
+  }
+
+
+  // 동적 MACE 위험도 계산 로직 (협착 개수, 환자 나이, 고혈압/당뇨 여부 기반 수식 계산)
   const activePatient = selectedDiagPatient || selectedPatient
   const currentStenosisCount = aiResult?.bounding_boxes?.length ?? activePatient?.stenosis_count ?? 1
   const currentAge = activePatient?.age ?? 67
@@ -682,6 +790,63 @@ export default function Dashboard({
   const maceCategoryColor = currentMaceRisk < 30 ? 'text-emerald-400' : currentMaceRisk < 70 ? 'text-amber-400' : 'text-red-400'
 
   return (
+    <>
+    {aiVisualizationNotice && (
+      <div
+        className={`fixed right-5 top-16 z-[100] flex max-w-sm items-start gap-3 rounded-lg border px-4 py-3 shadow-2xl backdrop-blur-md ${
+          String(
+            aiResult?.predicted_label || ''
+          ).toLowerCase() === 'stenosis'
+            ? 'border-amber-500/40 bg-amber-950/95 text-amber-100'
+            : 'border-emerald-500/40 bg-emerald-950/95 text-emerald-100'
+        }`}
+        role="status"
+      >
+        {String(
+          aiResult?.predicted_label || ''
+        ).toLowerCase() === 'stenosis' ? (
+          <AlertTriangle
+            size={18}
+            className="mt-0.5 shrink-0 text-amber-400"
+          />
+        ) : (
+          <CheckCircle2
+            size={18}
+            className="mt-0.5 shrink-0 text-emerald-400"
+          />
+        )}
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">
+            {String(
+              aiResult?.predicted_label || ''
+            ).toLowerCase() === 'stenosis'
+              ? 'AI 분석 완료' : '정상 분석 완료'}
+          </p>
+
+          <p className="mt-0.5 text-xs leading-relaxed opacity-90">
+            {aiVisualizationNotice}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setAiVisualizationNotice('')
+
+            if (aiNoticeTimerRef.current) {
+              window.clearTimeout(
+                aiNoticeTimerRef.current
+              )
+            }
+          }}
+          className="shrink-0 opacity-60 hover:opacity-100"
+          aria-label="안내 닫기"
+        >
+          <X size={15} />
+        </button>
+      </div>
+    )}
     <div className="flex flex-col h-screen overflow-hidden text-gray-100" style={{ backgroundColor: '#060B18' }}>
       {/* 상단 헤더 */}
       <header className="flex items-center justify-between px-4 h-12 border-b border-blue-800/40 bg-gray-900/70 backdrop-blur-md shrink-0 shadow-lg z-25">
@@ -696,7 +861,7 @@ export default function Dashboard({
           <h1 className="text-white font-bold text-sm tracking-wide truncate">혈관조영술 AI 진단 시스템</h1>
         </div>
         <div className="flex items-center space-x-3 text-xs">
-          <NotificationBell />
+          <NotificationBell onConsultationOpen={handleConsultationNotification} />
           <span className="font-medium text-blue-200">{displayName} (의료진)</span>
           <button onClick={onLogout} className="text-red-400 hover:text-red-300 font-medium">로그아웃</button>
         </div>
@@ -819,7 +984,11 @@ export default function Dashboard({
           ) : currentMenu === 'patients' ? (
             <PatientManagement patients={patientList} errorMessage={errorMessage} onSelectPatient={handleSelectPatient} />
           ) : currentMenu === 'consultation' ? (
-            <ConsultationView />
+            <ConsultationView 
+                selectedPatient={selectedPatient}
+                currentUserName={displayName}
+                targetConsultationId={targetConsultationId}
+            />
           ) : currentMenu === 'bookmarks' ? (
             <BookmarkView 
               bookmarks={bookmarks} 
@@ -983,8 +1152,10 @@ export default function Dashboard({
                     <Xai_visualization 
                         showHeatmap={showHeatmap}
                         setShowHeatmap={setShowHeatmap}
+                        onHeatmapToggle={handleHeatmapToggle}
                         showBoundingBox={showBoundingBox}
                         setShowBoundingBox={setShowBoundingBox}
+                        onBoundingBoxToggle={handleBoundingBoxToggle}
                         heatmapOpacity={heatmapOpacity}
                         setHeatmapOpacity={setHeatmapOpacity}
                         confidenceThreshold={confidenceThreshold}
@@ -1216,5 +1387,6 @@ export default function Dashboard({
         </div>
       )}
     </div>
+    </>
   )
 }
