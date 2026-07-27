@@ -555,13 +555,35 @@ useEffect(() => {
   // 사이드바 하단 버튼을 통한 북마크 추가 핸들러 연동
   const handleTriggerAddBookmark = () => {
     if (!onAddBookmark) return
+
+    if (!selectedPatient?.patient_id) {
+      alert('환자를 먼저 선택하세요')
+      return
+    }
+
     const minutes = String(Math.floor(currentFrame / 60 / 10)).padStart(2, '0')
     const seconds = String(Math.floor((currentFrame / 10) % 60)).padStart(2, '0')
-    
+
+    // AI 결과가 있으면 bbox로 넣고, 없으면 빈 배열
+    const bboxFromAi =
+      aiResult && (aiResult.bbox || aiResult.box)
+        ? [
+            {
+              id: 'ai-1',
+              ...(aiResult.bbox || aiResult.box),
+              label: aiResult.predicted_label || 'Stenosis',
+              score: aiResult.confidence ?? null,
+            },
+          ]
+        : []
+
     onAddBookmark({
       title: `프레임 ${currentFrame} 분석 지점`,
-      patientId: selectedPatient ? selectedPatient.patient_id : '공통',
-      note: `타임라인 ${minutes}:${seconds} 구간 확인`
+      patientId: selectedPatient.patient_id,
+      note: `타임라인 ${minutes}:${seconds} 구간 확인`,
+      frameNumber: currentFrame,
+      examId: selectedPatient?.latest_exam_id ?? selectedPatient?.exam_id ?? null,
+      bboxData: bboxFromAi,
     })
   }
 
@@ -840,9 +862,20 @@ useEffect(() => {
                 <p className="text-[10px] text-gray-400 text-center py-1">북마크 없음</p>
               )}
             </div>
-            <button 
-              onClick={handleTriggerAddBookmark} 
-              className="flex w-full items-center justify-center gap-1 rounded border border-dashed border-blue-700/60 py-1.5 text-[11px] font-medium text-blue-300 hover:border-blue-400 hover:bg-blue-900/40 hover:text-white transition-all shadow-inner"
+            <button
+              type="button"
+              onClick={handleTriggerAddBookmark}
+              title={
+                selectedPatient
+                  ? '현재 화면 북마크 추가'
+                  : '환자를 먼저 선택하세요'
+              }
+              className={
+                'flex w-full items-center justify-center gap-1 rounded border border-dashed py-1.5 text-[11px] font-medium transition-all shadow-inner ' +
+                (selectedPatient
+                  ? 'border-blue-700/60 text-blue-300 hover:border-blue-400 hover:bg-blue-900/40 hover:text-white'
+                  : 'border-gray-700 text-gray-500 opacity-50 cursor-not-allowed')
+              }
             >
               <Plus size={12} /> 현재 화면 북마크 추가
             </button>
