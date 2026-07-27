@@ -165,6 +165,7 @@ export default function Home({ displayName, patients = [], onNavigate, onSelectP
                   <th className="px-3 py-2.5 font-semibold">환자명</th>
                   <th className="px-3 py-2.5 font-semibold">나이/성별</th>
                   <th className="px-3 py-2.5 font-semibold">주호소</th>
+                  <th className="px-3 py-2.5 font-semibold">Troponin T</th>
                   <th className="px-3 py-2.5 font-semibold text-center">관리</th>
                 </tr>
               </thead>
@@ -176,6 +177,11 @@ export default function Home({ displayName, patients = [], onNavigate, onSelectP
                       <td className="px-3 py-2.5 font-medium text-white">{patient.patient_name}</td>
                       <td className="px-3 py-2.5 text-gray-300">{patient.age}세 / {patient.gender}</td>
                       <td className="px-3 py-2.5 text-gray-300 truncate max-w-[120px]">{patient.chief_complaint || '-'}</td>
+                      <td className="px-3 py-2.5 font-mono text-gray-300">
+                        {patient.troponin_t_level != null && patient.troponin_t_level !== ''
+                          ? `${patient.troponin_t_level} ng/L`
+                          : '-'}
+                      </td>
                       <td className="px-3 py-2.5 text-center">
                         <button 
                           onClick={() => onSelectPatient && onSelectPatient(patient)}
@@ -188,7 +194,7 @@ export default function Home({ displayName, patients = [], onNavigate, onSelectP
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="px-3 py-8 text-center text-gray-400">
+                    <td colSpan={6} className="px-3 py-8 text-center text-gray-400">
                       등록된 환자 데이터가 없습니다. 상단 메뉴에서 환자를 등록하거나 검색해 주세요.
                     </td>
                   </tr>

@@ -70,7 +70,7 @@ function Xai_visualization({
                   key={option.value}
                   type="button"
                   onClick={() => setOverlayMode(option.value)}
-                  className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-lg border px-2 py-3 text-xm transition-colors ${
+                  className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-lg border px-2 py-3 text-xs transition-colors ${
                     isSelected
                       ? 'border-blue-500 bg-blue-600 text-white'
                       : 'border-gray-700 bg-gray-800 text-gray-300 hover:border-gray-600 hover:bg-gray-700'

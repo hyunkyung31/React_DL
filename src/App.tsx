@@ -10,6 +10,7 @@ import Intro from './Page/Intro'
 import Login from './Page/Login'
 import Dashboard from './Page/Dashboard'
 
+
 const API_BASE = 'http://34.80.83.7:8000'
 
 interface Patient {

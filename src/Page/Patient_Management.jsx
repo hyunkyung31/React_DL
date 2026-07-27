@@ -62,6 +62,7 @@ export default function PatientManagement({ patients, errorMessage, onSelectPati
                 <th className="px-6 py-3 font-semibold">나이/성별</th>
                 <th className="px-6 py-3 font-semibold">주호소</th>
                 <th className="px-6 py-3 font-semibold">ECG 결과</th>
+                <th className="px-6 py-3 font-semibold">Troponin T</th>
                 <th className="px-6 py-3 font-semibold text-center">관리 메뉴</th>
               </tr>
             </thead>
@@ -78,6 +79,11 @@ export default function PatientManagement({ patients, errorMessage, onSelectPati
                         {patient.ecg_result || '정상'}
                       </span>
                     </td>
+                    <td className="px-6 py-4 font-mono text-gray-300">
+                      {patient.troponin_t_level != null && patient.troponin_t_level !== ''
+                        ? `${patient.troponin_t_level} ng/L`
+                        : '-'}
+                    </td>
                     <td className="px-6 py-4 text-center">
                       <button 
                         onClick={() => onSelectPatient && onSelectPatient(patient)}
@@ -90,7 +96,7 @@ export default function PatientManagement({ patients, errorMessage, onSelectPati
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                     검색 결과가 없습니다.
                   </td>
                 </tr>
