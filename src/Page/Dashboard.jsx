@@ -770,7 +770,45 @@ export default function Dashboard({
         throw new Error(errorData?.detail || `AI 분석 요청 실패 (${response.status})`)
       }
       const data = await response.json()
-      setAiResult(data)
+      // /analysis/image 는 classification/detection 중첩 → UI용 flat 필드로 정규화
+      const classification = data.classification || data
+      const detection = data.detection || {}
+      const detections = detection.detections || data.detections || []
+      const boundingBoxes = detections.map((det, index) => {
+        const box = det.bbox || det.box || det
+        const x1 = box.x1 ?? box.x ?? (box.xyxy ? box.xyxy[0] : 0)
+        const y1 = box.y1 ?? box.y ?? (box.xyxy ? box.xyxy[1] : 0)
+        const x2 = box.x2 ?? ((box.x != null && box.width != null) ? box.x + box.width : (box.xyxy ? box.xyxy[2] : 0))
+        const y2 = box.y2 ?? ((box.y != null && box.height != null) ? box.y + box.height : (box.xyxy ? box.xyxy[3] : 0))
+        const norm = det.normalized_bbox
+        return {
+          id: det.detection_id || index + 1,
+          x: norm ? norm[0] * (detection.image_width || 1) : x1,
+          y: norm ? norm[1] * (detection.image_height || 1) : y1,
+          width: norm
+            ? (norm[2] - norm[0]) * (detection.image_width || 1)
+            : Math.max(0, x2 - x1),
+          height: norm
+            ? (norm[3] - norm[1]) * (detection.image_height || 1)
+            : Math.max(0, y2 - y1),
+          label: det.class_name || det.label || 'Stenosis',
+          confidence: det.confidence ?? 0,
+        }
+      })
+      setAiResult({
+        ...data,
+        ...classification,
+        predicted_label: classification.predicted_label ?? data.predicted_label,
+        confidence: classification.confidence ?? data.confidence,
+        probabilities: classification.probabilities ?? data.probabilities,
+        show_gradcam: classification.show_gradcam ?? data.show_gradcam,
+        heatmap_base64: classification.heatmap_base64 ?? data.heatmap_base64,
+        overlay_base64: classification.overlay_base64 ?? data.overlay_base64,
+        detections,
+        bounding_boxes: boundingBoxes.length
+          ? boundingBoxes
+          : (data.bounding_boxes || data.boxes || []),
+      })
     } catch (error) {
       console.error('AI 분석 오류:', error)
       setAiError(String(error))
@@ -1021,7 +1059,12 @@ export default function Dashboard({
                               </span>
                             </div>
                             <p className="text-xs font-bold text-white">
-                              {aiResult.predicted_label === 'Stenosis' ? '협착 의심' : '정상'}
+                              {(() => {
+                                const label = String(aiResult.predicted_label || '').toLowerCase()
+                                if (label === 'stenosis') return '협착 의심'
+                                if (label === 'normal') return '정상'
+                                return aiResult.predicted_label || '결과 없음'
+                              })()}
                             </p>
                           </div>
                           <div className="rounded border border-gray-800 bg-gray-800/40 p-2 space-y-1">
