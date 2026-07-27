@@ -186,6 +186,14 @@ export default function Dashboard({
   const [aiError, setAiError] = useState('')
   const [isMainDragOver, setIsMainDragOver] = useState(false)
 
+  // AI 결과 신뢰도
+  const confidenceScore = aiResult?.confidence != null
+    ? Number((aiResult.confidence * 100).toFixed(1)) : null 
+
+  // AI 결과 불확실도
+  const uncertaintyScore = aiResult?.confidence != null
+    ? Number(((1 - aiResult.confidence) * 100).toFixed(1)) : null
+
   // 실제 XAI 응답 우선, 없으면 Mock 사용
   const xaiData = useMemo(() => { return {
     showGradcam: aiResult?.show_gradcam ?? aiResult?.predicted_label === 'Stenosis',
@@ -193,6 +201,10 @@ export default function Dashboard({
     overlayBase64: aiResult?.overlay_base64 ?? null,
     boundingBoxes: aiResult?.bounding_boxes ?? aiResult?.boxes ?? [{ id: 1, x: 120, y: 90, width: 150, height: 120, label: 'Stenosis', confidence: 0.94,},],}
   }, [aiResult])
+
+  // 실제 YOLO Detection 결과
+  const yoloDetections = aiResult?.detections ?? aiResult?.yolo_result?.detections ?? []
+
 
   // 뷰어 인터랙션 상태 (줌인, 줌아웃, 팬, 전체화면)
   const [scale, setScale] = useState(1)
@@ -628,7 +640,7 @@ const handleFrameChange = (newFrame) => {
     try {
       const formData = new FormData()
       formData.append('file', aiFile)
-      const response = await fetch('http://34.80.83.7:8000/api/ai/predict/', {
+      const response = await fetch('http://34.80.83.7:8000/api/ai/image-analyze/', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${access}`,
@@ -640,13 +652,21 @@ const handleFrameChange = (newFrame) => {
         return
       }
       if (!response.ok) {
-        throw new Error('AI 분석 요청 실패')
+        const errorData = await response.json().catch(() => null)
+
+        console.error('이미지 통합 API 오류:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: errorData,
+        })
+
+        throw new Error(errorData?.detail || `AI 분석 요청 실패 (${response.status})`)
       }
       const data = await response.json()
       setAiResult(data)
     } catch (error) {
-      console.error(error)
-      setAiError('AI 분석에 실패했습니다.')
+      console.error('AI 분석 오류:', error)
+      setAiError(String(error))
     } finally {
       setAiLoading(false)
     }
@@ -969,13 +989,18 @@ const handleFrameChange = (newFrame) => {
 
                       {aiFileUrl && overlayMode === 'heatmap' && aiResult && xaiData.showGradcam && xaiData.heatmapBase64 && (
                         <img
-                          src={`data:image/png;base64,${xaiData.heatmapBase64}`}
+                          src={`data:image/png;base64,${aiResult.overlay_base64}`}
                           alt="Grad-CAM Heatmap"
                           className="pointer-events-none absolute inset-0 h-full w-full object-contain"
                           style={{ opacity: heatmapOpacity / 100 }} 
                         />
                       )}
 
+                      <canvas
+                        ref={boundingBoxCanvasRef}
+                        className="pointer-events-none absolute left-0 top-0 h-full w-full"
+                        aria-label="AI Bounding Box"
+                      />
                       {aiFileUrl && (
                         <>
                           <canvas
@@ -1186,7 +1211,11 @@ const handleFrameChange = (newFrame) => {
 
                 {/* EMR 최종 확정 패널 */}
                 <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-4 shadow-2xl">
-                  <EmrConfirmPanel />
+                  <EmrConfirmPanel
+                    impression={aiImpressionText}
+                    selectedVessels={selectedVessels}
+                    pciNeeded={pciNeeded}
+                  />
                 </div>
 
               </div>
