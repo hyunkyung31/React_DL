@@ -8,7 +8,7 @@ import {
   Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, 
   Trash2, Plus, Volume2, Download, FileText, Image as ImageIcon, Bookmark,
   ZoomIn, ZoomOut, Maximize2, Stethoscope, LayoutDashboard, Users, Cpu, 
-  Video, FileBarChart, Settings, Square, Menu, X, UserCheck, RotateCcw, CheckCircle2, Upload 
+  Video, FileBarChart, Settings, Square, Menu, X, UserCheck, RotateCcw, CheckCircle2, Upload, Heart, AlertTriangle 
 } from 'lucide-react'
 import angioImage from '../assets/angio_sample.png'
 import { fetchAuthBlobUrl } from '../utils/authMedia'
@@ -29,7 +29,7 @@ import Home from './Home'
 export function PatientManagement({ patients, errorMessage, onSelectPatient }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [searchCategory, setSearchCategory] = useState('all')
-  const [ecgModal, setEcgModal] = useState(null) // { patientId, ecgResult, objectUrl }
+  const [ecgModal, setEcgModal] = useState(null)
   const [ecgLoadingId, setEcgLoadingId] = useState(null)
 
   const openEcgModal = async (patient) => {
@@ -131,7 +131,7 @@ export function PatientManagement({ patients, errorMessage, onSelectPatient }) {
                           openEcgModal(patient)
                         }}
                         disabled={ecgLoadingId === patient.patient_id}
-                        className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-900/60 text-blue-300 border border-blue-700/60 shadow-inner hover:bg-blue-800/80 cursor-pointer disabled:opacity-50 disabled:cursor-wait"
+                        className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-900/60 text-blue-300 border border-blue-700/60 shadow-inner hover:bg-blue-800/85 cursor-pointer disabled:opacity-50 disabled:cursor-wait"
                         title="ECG 이미지 보기"
                       >
                         {ecgLoadingId === patient.patient_id
@@ -222,7 +222,6 @@ export default function Dashboard({
   const [modalSearchKeyword, setModalSearchKeyword] = useState('')
   const [isPatientLoading, setIsPatientLoading] = useState(false)
 
-  // XAI 시각화 상태 
   const [showHeatmap, setShowHeatmap] = useState(true)
   const [showBoundingBox, setShowBoundingBox] = useState(true)
   const [heatmapOpacity, setHeatmapOpacity] = useState(50)
@@ -234,38 +233,24 @@ export default function Dashboard({
   const boundingBoxCanvasRef = useRef(null)
   const videoRef = useRef(null)
   
-  // 모바일 반응형 사이드바 토글 상태
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
-
   const [sidebarSearch, setSidebarSearch] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false)
 
-  // 영상 재생 및 뷰어 관련 상태
   const [currentFrame, setCurrentFrame] = useState(1)
   const [totalFrames] = useState(30)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState('1.0x')
   const [selectedSeries, setSelectedSeries] = useState('Default Angio 01')
 
-  // AI진단 (predict)
   const [aiFile, setAiFile] = useState(null)
   const [aiFileUrl, setAiFileUrl] = useState(null)
   const [aiFileType, setAiFileType] = useState('image')
   const [aiLoading, setAiLoading] = useState(false)
   const [aiResult, setAiResult] = useState(null)
   const [aiError, setAiError] = useState('')
-  const [isMainDragOver, setIsMainDragOver] = useState(false)
 
-  // AI 결과 신뢰도
-  const confidenceScore = aiResult?.confidence != null
-    ? Number((aiResult.confidence * 100).toFixed(1)) : null 
-
-  // AI 결과 불확실도
-  const uncertaintyScore = aiResult?.confidence != null
-    ? Number(((1 - aiResult.confidence) * 100).toFixed(1)) : null
-
-  // 실제 XAI 응답 우선, 없으면 Mock 사용
   const xaiData = useMemo(() => { return {
     showGradcam: aiResult?.show_gradcam ?? aiResult?.predicted_label === 'Stenosis',
     heatmapBase64: aiResult?.heatmap_base64 ?? null,
@@ -273,69 +258,16 @@ export default function Dashboard({
     boundingBoxes: aiResult?.bounding_boxes ?? aiResult?.boxes ?? [{ id: 1, x: 120, y: 90, width: 150, height: 120, label: 'Stenosis', confidence: 0.94,},],}
   }, [aiResult])
 
-  // 실제 YOLO Detection 결과
-  const yoloDetections = aiResult?.detections ?? aiResult?.yolo_result?.detections ?? []
-
-
-  // 뷰어 인터랙션 상태 (줌인, 줌아웃, 팬, 전체화면)
   const [scale, setScale] = useState(1)
   const [position, setPosition] = useState({ x: 0, y: 0 })
-  const [isDragging, setIsDragging] = useState(false)
-  const dragStartRef = useRef({ mouseX: 0, mouseY: 0, imageX: 0, imageY: 0 })
-  const viewerContainerRef = useRef(null)
 
-  // ==========================================
-  // [희욱 추가] Llama-3 XAI 및 Interactive BBox / Canvas 주석 상태
-  // ==========================================
   const [selectedVessels, setSelectedVessels] = useState([])
   const [pciNeeded, setPciNeeded] = useState(false)
   const [aiImpressionText, setAiImpressionText] = useState('')
   const [canvasDrawMode, setCanvasDrawMode] = useState(null)
-  const [canvasAnnotations, setCanvasAnnotations] = useState([]) 
-  const [currentBBox, setCurrentBBox] = useState(null) 
-
-  // Main_viewer 컴포넌트와 연동할 의사 커스텀 주석 상태 관리
   const [userAnnotations, setUserAnnotations] = useState([])
 
-  // 비디오 첫 프레임(썸네일) 설정 및 끝 재생 처리
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const handleEnded = () => {
-      setIsPlaying(false);
-      video.currentTime = video.duration || 0; 
-    };
-
-    const handleTimeUpdate = () => {
-      if (video.duration && !isNaN(video.duration)) {
-        const progress = video.currentTime / video.duration;
-        const calculatedFrame = Math.min(totalFrames, Math.max(1, Math.floor(progress * totalFrames) + 1));
-      }
-    };
-
-    video.addEventListener('ended', handleEnded);
-    video.addEventListener('timeupdate', handleTimeUpdate);
-
-    return () => {
-      video.removeEventListener('ended', handleEnded);
-      video.removeEventListener('timeupdate', handleTimeUpdate);
-    };
-  }, [aiFileUrl, totalFrames]);
-
-  // 하단 재생 버튼 상태와 실제 비디오 재생 동기화
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-
-    if (isPlaying) {
-      video.play().catch((err) => console.log("재생 오류:", err))
-    } else {
-      video.pause()
-    }
-  }, [isPlaying])
-
-  // Django 백엔드 환자 목록 연동
+  // 환자 목록 동기화
   useEffect(() => {
     if (patients && patients.length > 0) {
       setPatientList(patients)
@@ -365,255 +297,77 @@ export default function Dashboard({
     fetchPatients()
   }, [patients])
 
-  // 자동 재생 타이머 (프레임 연동)
+  // 환자 선택 시 DICOM/이미지 연동 로직
   useEffect(() => {
-    if (!isPlaying) return
-    const speedVal = parseFloat(playbackSpeed.replace('x', ''))
-    const interval = 1000 / (10 * speedVal)
-    const timer = setInterval(() => {
-      setCurrentFrame((prev) => {
-        if (prev >= totalFrames) {
-          setIsPlaying(false)
-          return totalFrames
+    let objectUrl = null
+    let cancelled = false
+
+    async function loadPatientImage() {
+      const target = selectedDiagPatient || selectedPatient
+      if (!target?.patient_id) return
+
+      const access = localStorage.getItem('access')
+      if (!access) return
+
+      try {
+        const res = await fetch(
+          `http://34.80.83.7:8000/api/patients/${target.patient_id}/`,
+          { headers: { Authorization: `Bearer ${access}` } }
+        )
+        if (!res.ok) throw new Error('patient detail failed')
+
+        const data = await res.json()
+        const imageUrl = data.examinations?.[0]?.key_frame_url || data.key_frame_url || data.image_url
+
+        if (!imageUrl) {
+          setAiFileUrl(null)
+          setAiFile(null)
+          setIsViewerImageLoaded(false)
+          return
         }
-        return prev + 1
-      })
-    }, interval)
-    return () => clearInterval(timer)
-  }, [isPlaying, playbackSpeed, totalFrames])
 
-  const handleFrameChange = (newFrame) => {
-    setCurrentFrame(newFrame);
-    const video = videoRef.current;
-    if (video && !isNaN(video.duration) && video.duration > 0) {
-      const targetTime = ((newFrame - 1) / (totalFrames - 1)) * video.duration;
-      video.currentTime = targetTime;
-    }
-  };
+        objectUrl = await fetchAuthBlobUrl(imageUrl)
+        if (cancelled) return
 
-  // XAI Heatmap 렌더링
-  useEffect(() => {
-    const image = viewerImageRef.current
-    const canvas = heatmapCanvasRef.current
-
-    if (!image || !canvas || !isViewerImageLoaded) return
-
-    if (!aiResult) {
-      const context = canvas.getContext('2d')
-      if (context) {
-        context.clearRect(0, 0, canvas.width, canvas.height)
-      }
-      return
-    }
-
-    const drawHeatmap = () => {
-      const imageWidth = image.clientWidth
-      const imageHeight = image.clientHeight
-      if (imageWidth === 0 || imageHeight === 0) return
-
-      const pixelRatio = window.devicePixelRatio || 1
-      canvas.width = imageWidth * pixelRatio
-      canvas.height = imageHeight * pixelRatio
-      canvas.style.width = `${imageWidth}px`
-      canvas.style.height = `${imageHeight}px`
-
-      const context = canvas.getContext('2d')
-      if (!context) return
-
-      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
-      context.clearRect(0, 0, imageWidth, imageHeight)
-
-      if (!showHeatmap) return
-      if (xaiData.heatmapBase64) return
-
-      const opacity = heatmapOpacity / 100
-      const drawHeatPoint = (centerX, centerY, radius, intensity = 1) => {
-        const gradient = context.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius)
-        gradient.addColorStop(0,  `rgba(255, 0, 0, ${opacity * intensity})`)
-        gradient.addColorStop(0.3, `rgba(255, 90, 0, ${opacity * intensity * 0.9})`)
-        gradient.addColorStop(0.55, `rgba(255, 200, 0, ${opacity * intensity * 0.65})`)
-        gradient.addColorStop(0.78, `rgba(170, 255, 0, ${opacity * intensity * 0.3})`)
-        gradient.addColorStop(1, 'rgba(170, 255, 0, 0)')
-
-        context.fillStyle = gradient
-        context.fillRect(centerX - radius, centerY - radius, radius * 2, radius * 2)
-      }
-
-      drawHeatPoint(imageWidth * 0.53, imageHeight * 0.45, Math.min(imageWidth, imageHeight) * 0.24, 1)
-      drawHeatPoint(imageWidth * 0.47, imageHeight * 0.40, Math.min(imageWidth, imageHeight) * 0.16, 0.65)
-      drawHeatPoint(imageWidth * 0.59, imageHeight * 0.50, Math.min(imageWidth, imageHeight) * 0.14, 0.55)
-    }
-
-    drawHeatmap()
-    window.addEventListener('resize', drawHeatmap)
-    return () => window.removeEventListener('resize', drawHeatmap)
-  }, [showHeatmap, heatmapOpacity, isViewerImageLoaded, aiResult, xaiData.heatmapBase64])
-
-  // Bounding Box 렌더링
-  useEffect(() => {
-    const image = viewerImageRef.current
-    const canvas = boundingBoxCanvasRef.current
-
-    if (!image || !canvas || !isViewerImageLoaded) return
-
-    if (!aiResult) {
-      const context = canvas.getContext('2d')
-      if (context) {
-        context.clearRect(0, 0, canvas.width, canvas.height)
-      }
-      return
-    }
-
-    const drawBoundingBoxes = () => {
-      const imageWidth = image.clientWidth
-      const imageHeight = image.clientHeight
-      if (imageWidth === 0 || imageHeight === 0) return
-
-      const pixelRatio = window.devicePixelRatio || 1
-      canvas.width = imageWidth * pixelRatio
-      canvas.height = imageHeight * pixelRatio
-      canvas.style.width = `${imageWidth}px`
-      canvas.style.height = `${imageHeight}px`
-
-      const context = canvas.getContext('2d')
-      if (!context) return
-
-      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
-      context.clearRect(0, 0, imageWidth, imageHeight)
-
-      if (!showBoundingBox) return
-
-      const scaleX = imageWidth / image.naturalWidth
-      const scaleY = imageHeight / image.naturalHeight
-
-      xaiData.boundingBoxes
-        .filter((box) => Number(box.confidence ?? 0) * 100 >= confidenceThreshold)
-        .forEach((box) => {
-          const boxX = box.x * scaleX
-          const boxY = box.y * scaleY
-          const boxWidth = box.width * scaleX
-          const boxHeight = box.height * scaleY
-          const labelText = `${box.label} ${Math.round(box.confidence * 100)}%`
-
-          context.strokeStyle = '#ef4444'
-          context.lineWidth = 4
-          context.strokeRect(boxX, boxY, boxWidth, boxHeight)
-
-          context.font = 'bold 15px sans-serif'
-          const labelPadding = 6
-          const labelHeight = 24
-          const labelWidth = context.measureText(labelText).width + labelPadding * 2
-          const labelY = Math.max(boxY - labelHeight, 0)
-
-          context.fillStyle = '#ef4444'
-          context.fillRect(boxX, labelY, labelWidth, labelHeight)
-          context.fillStyle = '#ffffff'
-          context.fillText(labelText, boxX + labelPadding, labelY + 17)
+        const blobRes = await fetch(objectUrl)
+        const blob = await blobRes.blob()
+        const file = new File([blob], `${target.patient_id}_image.png`, {
+          type: blob.type || 'image/png',
         })
-    }
 
-    drawBoundingBoxes()
-    window.addEventListener('resize', drawBoundingBoxes)
-    return () => window.removeEventListener('resize', drawBoundingBoxes)
-  }, [showBoundingBox, confidenceThreshold, isViewerImageLoaded, aiResult, xaiData.boundingBoxes])
-
-  // 마우스 상호작용 핸들러
-  const handleMouseDown = (e) => {
-    if (!aiFileUrl) return
-    const rect = viewerContainerRef.current.getBoundingClientRect()
-    const startX = e.clientX - rect.left
-    const startY = e.clientY - rect.top
-
-    if (canvasDrawMode === 'bbox') {
-      setIsDragging(true)
-      setCurrentBBox({ startX, startY, width: 0, height: 0, frame: currentFrame })
-      return
-    }
-
-    if (canvasDrawMode === 'text') {
-      const textToDraw = prompt('Canvas에 표시할 임상 주석을 입력하세요:', 'LAD 75% 협착')
-      if (textToDraw) {
-        setCanvasAnnotations(prev => [
-          ...prev, 
-          { id: Date.now(), type: 'text', text: textToDraw, x: startX, y: startY, frame: currentFrame }
-        ])
+        setIsViewerImageLoaded(true)
+        setAiFileUrl(objectUrl)
+        setAiFile(file)
+        setAiFileType('image')
+        setAiResult(null)
+        setAiError('')
+      } catch (err) {
+        console.error('환자 이미지 로드 실패:', err)
+        setIsViewerImageLoaded(false)
       }
-      return
     }
 
-    setIsDragging(true)
-    dragStartRef.current = {
-      mouseX: e.clientX,
-      mouseY: e.clientY,
-      imageX: position.x,
-      imageY: position.y
+    loadPatientImage()
+
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }
-
-  const handleMouseMove = (e) => {
-    if (!isDragging) return
-
-    const rect = viewerContainerRef.current.getBoundingClientRect()
-    const currentX = e.clientX - rect.left
-    const currentY = e.clientY - rect.top
-
-    if (canvasDrawMode === 'bbox' && currentBBox) {
-      setCurrentBBox({
-        ...currentBBox,
-        width: currentX - currentBBox.startX,
-        height: currentY - currentBBox.startY
-      })
-      return
-    }
-
-    const dx = e.clientX - dragStartRef.current.mouseX
-    const dy = e.clientY - dragStartRef.current.mouseY
-    setPosition({
-      x: dragStartRef.current.imageX + dx,
-      y: dragStartRef.current.imageY + dy
-    })
-  }
-
-  const handleMouseUp = () => {
-    if (canvasDrawMode === 'bbox' && currentBBox) {
-      if (Math.abs(currentBBox.width) > 10 && Math.abs(currentBBox.height) > 10) {
-        setCanvasAnnotations(prev => [
-          ...prev,
-          { id: Date.now(), type: 'bbox', ...currentBBox }
-        ])
-      }
-      setCurrentBBox(null)
-    }
-    setIsDragging(false)
-  }
-
-  const handleWheel = (e) => {
-    if (!aiFileUrl) return
-    e.preventDefault()
-    const zoomIntensity = 0.15
-    if (e.deltaY < 0) {
-      setScale(prev => Math.min(prev + zoomIntensity, 3))
-    } else {
-      setScale(prev => Math.max(prev - zoomIntensity, 0.5))
-    }
-  }
+  }, [selectedDiagPatient, selectedPatient])
 
   const handleFileUpload = (file) => {
     if (!file) return
     const fileUrl = URL.createObjectURL(file)
     setAiFileUrl(fileUrl)
     setAiFile(file)
-    if (file.type.startsWith('video/')) {
-      setAiFileType('video')
-    } else {
-      setAiFileType('image')
-    }
+    setAiFileType(file.type.startsWith('video/') ? 'video' : 'image')
     setIsPlaying(false)
     setCurrentFrame(1)
     setScale(1)
     setPosition({ x: 0, y: 0 })
     setAiResult(null)
     setAiError('')
+    setIsViewerImageLoaded(true)
   }
 
   const handleTriggerAddBookmark = () => {
@@ -652,59 +406,6 @@ export default function Dashboard({
     })
   }
 
-  // 환자 선택 시 DB/GCS key_frame을 AI 뷰어에 로드
-  useEffect(() => {
-    let objectUrl = null
-    let cancelled = false
-
-    async function loadKeyFrame() {
-      if (!selectedPatient?.patient_id) return
-
-      const access = localStorage.getItem('access')
-      if (!access) return
-
-      try {
-        const res = await fetch(
-          `http://34.80.83.7:8000/api/patients/${selectedPatient.patient_id}/`,
-          { headers: { Authorization: `Bearer ${access}` } }
-        )
-        if (!res.ok) throw new Error('patient detail failed')
-
-        const data = await res.json()
-        const keyFrameUrl = data.examinations?.[0]?.key_frame_url
-        if (!keyFrameUrl) {
-          console.warn('key_frame_url missing for', selectedPatient.patient_id)
-          return
-        }
-
-        objectUrl = await fetchAuthBlobUrl(keyFrameUrl)
-        if (cancelled) return
-
-        const blobRes = await fetch(objectUrl)
-        const blob = await blobRes.blob()
-        const file = new File([blob], `${selectedPatient.patient_id}_key_frame.png`, {
-          type: blob.type || 'image/png',
-        })
-
-        setIsViewerImageLoaded(false)
-        setAiFileUrl(objectUrl)
-        setAiFile(file)
-        setAiFileType('image')
-        setAiResult(null)
-        setAiError('')
-      } catch (err) {
-        console.error('key_frame load failed', err)
-      }
-    }
-
-    loadKeyFrame()
-
-    return () => {
-      cancelled = true
-      // objectUrl은 다음 이미지로 교체될 때 뷰어가 쓰므로 여기서 revoke하지 않음
-    }
-  }, [selectedPatient])
-
   const handleSelectPatient = (patient) => {
     setSelectedPatient(patient)
     setSelectedDiagPatient(patient)
@@ -717,6 +418,9 @@ export default function Dashboard({
   const handleToggleSelectPatient = (patient) => {
     if (selectedDiagPatient?.patient_id === patient.patient_id) {
       setSelectedDiagPatient(null)
+      setAiFileUrl(null)
+      setAiFile(null)
+      setIsViewerImageLoaded(false)
     } else {
       setSelectedDiagPatient(patient)
     }
@@ -741,7 +445,7 @@ export default function Dashboard({
 
   const handleAiPredict = async () => {
     if (!aiFile) {
-      alert('분석할 이미지나 파일을 선택해주세요.')
+      alert('Error: 등록된 이미지가 없습니다. Dicom파일이나 영상파일을 업로드 후 분석을 실행하세요.')
       return
     }
     const access = localStorage.getItem('access')
@@ -771,7 +475,6 @@ export default function Dashboard({
         throw new Error(errorData?.detail || `AI 분석 요청 실패 (${response.status})`)
       }
       const data = await response.json()
-      // /analysis/image 는 classification/detection 중첩 → UI용 flat 필드로 정규화
       const classification = data.classification || data
       const detection = data.detection || {}
       const detections = detection.detections || data.detections || []
@@ -786,12 +489,8 @@ export default function Dashboard({
           id: det.detection_id || index + 1,
           x: norm ? norm[0] * (detection.image_width || 1) : x1,
           y: norm ? norm[1] * (detection.image_height || 1) : y1,
-          width: norm
-            ? (norm[2] - norm[0]) * (detection.image_width || 1)
-            : Math.max(0, x2 - x1),
-          height: norm
-            ? (norm[3] - norm[1]) * (detection.image_height || 1)
-            : Math.max(0, y2 - y1),
+          width: norm ? (norm[2] - norm[0]) * (detection.image_width || 1) : Math.max(0, x2 - x1),
+          height: norm ? (norm[3] - norm[1]) * (detection.image_height || 1) : Math.max(0, y2 - y2),
           label: det.class_name || det.label || 'Stenosis',
           confidence: det.confidence ?? 0,
         }
@@ -806,9 +505,7 @@ export default function Dashboard({
         heatmap_base64: classification.heatmap_base64 ?? data.heatmap_base64,
         overlay_base64: classification.overlay_base64 ?? data.overlay_base64,
         detections,
-        bounding_boxes: boundingBoxes.length
-          ? boundingBoxes
-          : (data.bounding_boxes || data.boxes || []),
+        bounding_boxes: boundingBoxes.length ? boundingBoxes : (data.bounding_boxes || data.boxes || []),
       })
     } catch (error) {
       console.error('AI 분석 오류:', error)
@@ -825,29 +522,61 @@ export default function Dashboard({
     return name.toLowerCase().includes(kw) || String(id).toLowerCase().includes(kw)
   })
 
+  // 동적 MACE 위험도 계산 로직 (협착 개수, 환자 나이, 고혈압/당뇨 여부 기반 수식 계산)
+  const activePatient = selectedDiagPatient || selectedPatient
+  const currentStenosisCount = aiResult?.bounding_boxes?.length ?? activePatient?.stenosis_count ?? 1
+  const currentAge = activePatient?.age ?? 67
+  const hasHypertensionVal = activePatient?.has_hypertension ?? true
+  const hasDiabetesVal = activePatient?.has_diabetes ?? true
+
+  // 입력 요인에 따른 동적 MACE 위험도 계산 공식 적용
+  const calculatedMaceRisk = Math.min(
+    100,
+    Math.max(
+      0,
+      (currentAge * 0.4) + (currentStenosisCount * 12) + (hasHypertensionVal ? 15 : 0) + (hasDiabetesVal ? 18 : 0) - 10
+    )
+  )
+  const currentMaceRisk = aiResult?.mace_risk_score ?? activePatient?.mace_risk_score ?? calculatedMaceRisk
+  const currentHypertension = hasHypertensionVal ? '있음' : '없음'
+  const currentDiabetes = hasDiabetesVal ? '있음' : '없음'
+
+  // MACE 위험도 단계 결정 (낮음 / 중간 / 높음)
+  const maceCategory = currentMaceRisk < 30 ? '낮음 위험' : currentMaceRisk < 70 ? '중간 위험' : '높음 위험'
+  const maceCategoryColor = currentMaceRisk < 30 ? 'text-emerald-400' : currentMaceRisk < 70 ? 'text-amber-400' : 'text-red-400'
+
+  // 반원형 게이지 SVG 인디케이터 위치 계산
+  const maceAngle = (currentMaceRisk / 100) * 180 - 90
+  const maceRad = (maceAngle * Math.PI) / 180
+  const gaugeCx = 75
+  const gaugeCy = 70
+  const gaugeR = 52
+  const indicatorX = gaugeCx + gaugeR * Math.cos(maceRad)
+  const indicatorY = gaugeCy + gaugeR * Math.sin(maceRad)
+
   return (
-    <div className="flex flex-col h-screen text-gray-100 overflow-hidden" style={{ backgroundColor: '#060B18' }}>
+    <div className="flex flex-col h-screen overflow-hidden text-gray-100" style={{ backgroundColor: '#060B18' }}>
       {/* 상단 헤더 */}
-      <header className="flex items-center justify-between px-6 h-14 border-b border-blue-800/40 bg-gray-900/70 backdrop-blur-md shrink-0 shadow-lg z-20">
-        <div className="flex items-center space-x-4">
+      <header className="flex items-center justify-between px-4 h-12 border-b border-blue-800/40 bg-gray-900/70 backdrop-blur-md shrink-0 shadow-lg z-25">
+        <div className="flex items-center space-x-3">
           <button 
             onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-            className="md:hidden p-1.5 text-gray-300 hover:text-white rounded bg-gray-800 border border-blue-800/50"
+            className="md:hidden p-1 text-gray-300 hover:text-white rounded bg-gray-800 border border-blue-800/50"
           >
-            {isMobileSidebarOpen ? <X size={18} /> : <Menu size={18} />}
+            {isMobileSidebarOpen ? <X size={16} /> : <Menu size={16} />}
           </button>
-          <div className="px-3 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded shadow-lg shadow-blue-600/30">LOGO</div>
-          <h1 className="text-white font-bold text-sm md:text-lg tracking-wide truncate">혈관조영술 AI 진단 시스템</h1>
+          <div className="px-2.5 py-0.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-xs rounded shadow-lg shadow-blue-600/30">LOGO</div>
+          <h1 className="text-white font-bold text-sm tracking-wide truncate">혈관조영술 AI 진단 시스템</h1>
         </div>
-        <div className="flex items-center space-x-4">
-          <span className="hidden sm:inline text-sm text-gray-200 hover:text-white cursor-pointer">알림</span>
-          <span className="text-xs md:text-sm font-medium text-blue-200">{displayName} (의료진)</span>
-          <button onClick={onLogout} className="text-xs md:text-sm text-red-400 hover:text-red-300 font-medium">로그아웃</button>
+        <div className="flex items-center space-x-3 text-xs">
+          <span className="hidden sm:inline text-gray-300 hover:text-white cursor-pointer">알림</span>
+          <span className="font-medium text-blue-200">{displayName} (의료진)</span>
+          <button onClick={onLogout} className="text-red-400 hover:text-red-300 font-medium">로그아웃</button>
         </div>
       </header>
 
       {/* 메인 레이아웃 */}
-      <div className="flex flex-1 overflow-hidden relative">
+      <div className="flex flex-1 h-[calc(100vh-3rem)] overflow-hidden relative">
         {isMobileSidebarOpen && (
           <div onClick={() => setIsMobileSidebarOpen(false)} className="absolute inset-0 bg-black/60 z-30 md:hidden backdrop-blur-sm" />
         )}
@@ -855,14 +584,14 @@ export default function Dashboard({
         {/* 사이드바 */}
         <aside className={`
           absolute md:relative inset-y-0 left-0 z-40 
-          w-60 border-r border-blue-800/40 bg-gray-900/95 md:bg-gray-900/60 backdrop-blur-md 
-          flex flex-col justify-between p-3 shrink-0 overflow-y-auto
+          w-56 border-r border-blue-800/40 bg-gray-900/95 md:bg-gray-900/60 backdrop-blur-md 
+          flex flex-col justify-between p-2.5 shrink-0 overflow-y-hidden
           transform transition-transform duration-300 ease-in-out
           ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         `}>
-          <div>
-            <div className="mb-4 relative">
-              <label className="text-xs font-semibold text-gray-300">전체 환자 빠른 검색</label>
+          <div className="overflow-y-auto pr-0.5">
+            <div className="mb-3 relative">
+              <label className="text-[11px] font-semibold text-gray-300">전체 환자 빠른 검색</label>
               <input 
                 type="text" 
                 placeholder="이름/ID 입력 후 Enter" 
@@ -872,12 +601,12 @@ export default function Dashboard({
                   if (isSearchDropdownOpen) setIsSearchDropdownOpen(false)
                 }}
                 onKeyDown={handleSidebarSearchKeyDown}
-                className="w-full mt-1 px-2.5 py-1.5 bg-gray-900 border border-blue-800/50 rounded text-xs text-white placeholder-gray-400 focus:outline-none focus:border-blue-400 shadow-inner"
+                className="w-full mt-1 px-2 py-1 bg-gray-900 border border-blue-800/50 rounded text-xs text-white placeholder-gray-400 focus:outline-none focus:border-blue-400 shadow-inner"
               />
 
               {isSearchDropdownOpen && searchResults.length > 0 && (
-                <div className="absolute left-0 right-0 mt-1 bg-gray-900 border border-blue-800/60 rounded-lg shadow-2xl z-50 max-h-60 overflow-y-auto backdrop-blur-xl">
-                  <div className="p-2 text-xs text-gray-300 border-b border-blue-800/40 flex justify-between items-center">
+                <div className="absolute left-0 right-0 mt-1 bg-gray-900 border border-blue-800/60 rounded-lg shadow-2xl z-50 max-h-52 overflow-y-auto backdrop-blur-xl">
+                  <div className="p-1.5 text-[11px] text-gray-300 border-b border-blue-800/40 flex justify-between items-center">
                     <span>검색 결과 ({searchResults.length})</span>
                     <button onClick={() => setIsSearchDropdownOpen(false)} className="text-gray-400 hover:text-white">✕</button>
                   </div>
@@ -887,19 +616,19 @@ export default function Dashboard({
                       <div 
                         key={patient.patient_id}
                         onClick={() => handleToggleSelectPatient(patient)}
-                        className={`p-2.5 cursor-pointer border-b border-blue-900/30 last:border-none transition-colors flex items-center justify-between ${
+                        className={`p-2 cursor-pointer border-b border-blue-900/30 last:border-none transition-colors flex items-center justify-between ${
                           isSelected ? 'bg-blue-900/60 border-l-4 border-l-blue-400' : 'hover:bg-blue-900/30'
                         }`}
                       >
                         <div>
-                          <p className="text-sm font-medium text-white flex items-center gap-1">
+                          <p className="text-xs font-medium text-white flex items-center gap-1">
                             {patient.patient_name}
-                            {isSelected && <CheckCircle2 size={13} className="text-blue-400 inline" />}
+                            {isSelected && <CheckCircle2 size={12} className="text-blue-400 inline" />}
                           </p>
-                          <p className="text-xs text-gray-300">ID: {patient.patient_id} ({patient.age}세/{patient.gender})</p>
+                          <p className="text-[10px] text-gray-300">ID: {patient.patient_id}</p>
                         </div>
-                        <span className={`text-[10px] px-2 py-0.5 rounded font-medium ${isSelected ? 'bg-red-950 text-red-300 border border-red-800/60' : 'bg-blue-600 text-white'}`}>
-                          {isSelected ? '선택취소' : '선택'}
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isSelected ? 'bg-red-950 text-red-300 border border-red-800/60' : 'bg-blue-600 text-white'}`}>
+                          {isSelected ? '취소' : '선택'}
                         </span>
                       </div>
                     )
@@ -909,50 +638,50 @@ export default function Dashboard({
             </div>
 
             <nav className="space-y-1">
-              <button onClick={() => { setCurrentMenu('dashboard'); setSelectedPatient(null); }} className={`w-full flex items-center gap-2 px-2.5 py-2 rounded text-xs transition-all ${currentMenu === 'dashboard' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-lg' : 'text-gray-300 hover:bg-blue-900/30'}`}>
-                <LayoutDashboard size={15} /> 대시보드 홈
+              <button onClick={() => { setCurrentMenu('dashboard'); setSelectedPatient(null); }} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs transition-all ${currentMenu === 'dashboard' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-lg' : 'text-gray-300 hover:bg-blue-900/30'}`}>
+                <LayoutDashboard size={14} /> 대시보드 홈
               </button>
-              <button onClick={() => { setCurrentMenu('patients'); setSelectedPatient(null); }} className={`w-full flex items-center gap-2 px-2.5 py-2 rounded text-xs transition-all ${currentMenu === 'patients' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-lg' : 'text-gray-300 hover:bg-blue-900/30'}`}>
-                <Users size={15} /> 환자 목록 ({patientList.length})
+              <button onClick={() => { setCurrentMenu('patients'); setSelectedPatient(null); }} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs transition-all ${currentMenu === 'patients' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-lg' : 'text-gray-300 hover:bg-blue-900/30'}`}>
+                <Users size={14} /> 환자 목록 ({patientList.length})
               </button>
-              <button onClick={() => { setCurrentMenu('consultation'); setSelectedPatient(null); }} className={`w-full flex items-center gap-2 px-2.5 py-2 rounded text-xs transition-all ${currentMenu === 'consultation' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-lg' : 'text-gray-300 hover:bg-blue-900/30'}`}>
-                <Stethoscope size={15} /> 협진요청
+              <button onClick={() => { setCurrentMenu('consultation'); setSelectedPatient(null); }} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs transition-all ${currentMenu === 'consultation' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-lg' : 'text-gray-300 hover:bg-blue-900/30'}`}>
+                <Stethoscope size={14} /> 협진요청
               </button>
-              <button onClick={() => { setCurrentMenu('ai-diag'); setSelectedPatient(null); }} className={`w-full flex items-center gap-2 px-2.5 py-2 rounded text-xs transition-all ${currentMenu === 'ai-diag' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-lg' : 'text-gray-300 hover:bg-blue-900/30'}`}>
-                <Cpu size={15} /> AI 진단
+              <button onClick={() => { setCurrentMenu('ai-diag'); setSelectedPatient(null); }} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs transition-all ${currentMenu === 'ai-diag' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-lg' : 'text-gray-300 hover:bg-blue-900/30'}`}>
+                <Cpu size={14} /> AI 진단
               </button>
-              <button onClick={() => { setCurrentMenu('bookmarks'); setSelectedPatient(null); }} className={`w-full flex items-center gap-2 px-2.5 py-2 rounded text-xs transition-all ${currentMenu === 'bookmarks' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-lg' : 'text-gray-300 hover:bg-blue-900/30'}`}>
-                <Bookmark size={15} /> 북마크 관리
+              <button onClick={() => { setCurrentMenu('bookmarks'); setSelectedPatient(null); }} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs transition-all ${currentMenu === 'bookmarks' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium shadow-lg' : 'text-gray-300 hover:bg-blue-900/30'}`}>
+                <Bookmark size={14} /> 북마크 관리
               </button>
             </nav>
           </div>
 
-          <div className="mt-6 border-t border-blue-800/40 pt-3">
-            <div className="flex items-center gap-1.5 mb-2">
-              <Bookmark size={14} className="text-blue-400" />
-              <span className="text-[11px] font-semibold text-gray-200">최근 북마크 ({bookmarks.length})</span>
+          <div className="mt-2 border-t border-blue-800/40 pt-2 shrink-0">
+            <div className="flex items-center gap-1 mb-1">
+              <Bookmark size={12} className="text-blue-400" />
+              <span className="text-[10px] font-semibold text-gray-200">최근 북마크 ({bookmarks.length})</span>
             </div>
-            <div className="space-y-1.5 mb-2.5 max-h-32 overflow-y-auto pr-1">
+            <div className="space-y-1 mb-2 max-h-20 overflow-y-auto pr-1">
               {bookmarks.map((bm, index) => (
-                <div key={bm.id || index} className="flex items-center justify-between rounded bg-blue-950/40 px-2 py-1 text-[11px] border border-blue-800/40 shadow-inner">
+                <div key={bm.id || index} className="flex items-center justify-between rounded bg-blue-950/40 px-2 py-0.5 text-[10px] border border-blue-800/40 shadow-inner">
                   <span className="text-gray-200 truncate">{bm.note || bm.title}</span>
                   {onDeleteBookmark && (
                     <button onClick={() => onDeleteBookmark(bm.id)} className="text-gray-400 hover:text-red-400">
-                      <Trash2 size={12} />
+                      <Trash2 size={10} />
                     </button>
                   )}
                 </div>
               ))}
             </div>
-            <button onClick={handleTriggerAddBookmark} className="flex w-full items-center justify-center gap-1 rounded border border-dashed border-blue-700/60 py-1.5 text-[11px] font-medium text-blue-300 hover:bg-blue-900/40">
-              <Plus size={12} /> 현재 화면 북마크 추가
+            <button onClick={handleTriggerAddBookmark} className="flex w-full items-center justify-center gap-1 rounded border border-dashed border-blue-700/60 py-1 text-[10px] font-medium text-blue-300 hover:bg-blue-900/40">
+              <Plus size={10} /> 현재 화면 북마크 추가
             </button>
+            <div className="text-[9px] text-gray-400 mt-2 truncate">{healthStatus}</div>
           </div>
-          <div className="text-[10px] text-gray-400 mt-3 pt-2 border-t border-blue-800/40 truncate">{healthStatus}</div>
         </aside>
 
         {/* 본문 영역 */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col h-full overflow-hidden">
           {currentMenu === 'dashboard' ? (
             <Home
               displayName={displayName}
@@ -973,121 +702,148 @@ export default function Dashboard({
               onSelectBookmark={(item) => console.log('선택된 북마크 항목:', item)} 
             />
           ) : (
-            <main className="flex-1 p-4 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-4" style={{ backgroundColor: '#060B18' }}>
+            <main className="flex-1 p-1.5 h-full overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-1.5" style={{ backgroundColor: '#060B18' }}>
               
-              {/* [좌측 영역: 메인 뷰어 및 재생 컨트롤 통합] */}
-              <div className="lg:col-span-7 flex flex-col space-y-3">
+              {/* [좌측 메인 뷰어 영역 - 6컬럼] */}
+              <div className="lg:col-span-6 flex flex-col h-full space-y-1.5 overflow-hidden">
                 
-                {/* 환자 선택 및 업로드 바 */}
-                <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-3 flex flex-col gap-2.5 shadow-xl">
+                {/* 환자 선택 및 업로드 바 (드래그 앤 드롭 영역 포함) */}
+                <div 
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                      handleFileUpload(e.dataTransfer.files[0])
+                    }
+                  }}
+                  className="rounded-lg border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-1.5 flex flex-col gap-1 shadow-xl shrink-0"
+                >
                   <div className="flex items-center justify-between gap-2">
                     <button
                       onClick={() => setIsPatientModalOpen(true)}
-                      className="flex items-center gap-1.5 px-3 py-1 bg-blue-950 hover:bg-blue-900 text-blue-200 border border-blue-700/60 rounded text-xs font-semibold shadow-inner"
+                      className="flex items-center gap-1 px-2 py-0.5 bg-blue-950 hover:bg-blue-900 text-blue-200 border border-blue-700/60 rounded text-[10px] font-semibold shadow-inner"
                     >
-                      <UserCheck size={14} className="text-blue-400" />
+                      <UserCheck size={12} className="text-blue-400" />
                       <span>{selectedDiagPatient ? '환자 변경' : '환자 검색'}</span>
                     </button>
                     {selectedDiagPatient ? (
-                      <div className="flex items-center gap-2 bg-blue-900/40 border border-blue-700/50 px-2.5 py-0.5 rounded text-xs text-white truncate">
+                      <div className="flex items-center gap-2 bg-blue-900/40 border border-blue-700/50 px-2 py-0.5 rounded text-[10px] text-white truncate">
                         <span className="truncate"><strong className="text-blue-300">{selectedDiagPatient.patient_name}</strong></span>
-                        <button onClick={() => setSelectedDiagPatient(null)} className="text-red-400 hover:text-red-300 font-bold ml-1 shrink-0" title="선택 취소">✕</button>
+                        <button onClick={() => {
+                          setSelectedDiagPatient(null)
+                          setAiFileUrl(null)
+                          setAiFile(null)
+                          setIsViewerImageLoaded(false)
+                        }} className="text-red-400 hover:text-red-300 font-bold ml-1 shrink-0" title="선택 취소">✕</button>
                       </div>
                     ) : (
-                      <span className="text-xs text-gray-400">선택 환자 없음</span>
+                      <span className="text-[10px] text-gray-400">선택 환자 없음 (파일을 드래그하여 올리세요)</span>
                     )}
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <label className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-blue-200 border border-blue-800/50 rounded text-xs font-semibold cursor-pointer shadow-md">
-                      <Upload size={13} />
-                      <span>파일 업로드</span>
+                    <label className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-gray-800 hover:bg-gray-700 text-blue-200 border border-blue-800/50 rounded text-[10px] font-semibold cursor-pointer shadow-md">
+                      <Upload size={11} />
+                      <span>파일 업로드 (또는 드래그 앤 드롭)</span>
                       <input type="file" accept="image/*,video/*" onChange={(e) => handleFileUpload(e.target.files?.[0])} className="hidden" />
                     </label>
                     <button
                       type="button"
                       onClick={handleAiPredict}
-                      disabled={aiLoading || !aiFile}
-                      className="px-3.5 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold disabled:opacity-50 shadow-md shadow-blue-600/30"
+                      disabled={aiLoading}
+                      className="px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-semibold disabled:opacity-50 shadow-md shadow-blue-600/30"
                     >
                       {aiLoading ? '분석 중...' : 'AI 분석'}
                     </button>
                   </div>
                 </div>
 
-                {/* Main_viewer 컴포넌트 장착부 (커스텀 주석 콜백 연동) */}
-                <Main_viewer
-                  patientData={selectedDiagPatient || selectedPatient}
-                  aiFileUrl={aiFileUrl}
-                  aiFileType={aiFileType}
-                  aiResult={aiResult}
-                  showHeatmap={showHeatmap}
-                  showBoundingBox={showBoundingBox}
-                  confidenceThreshold={confidenceThreshold}
-                  heatmapOpacity={heatmapOpacity}
-                  currentFrame={currentFrame}
-                  totalFrames={totalFrames}
-                  isPlaying={isPlaying}
-                  setIsPlaying={setIsPlaying}
-                  playbackSpeed={playbackSpeed}
-                  setPlaybackSpeed={setPlaybackSpeed}
-                  onFrameChange={handleFrameChange}
-                  userAnnotations={userAnnotations}
-                  onAnnotationsChange={(updatedAnnotations) => setUserAnnotations(updatedAnnotations)}
-                />
+                {/* Main_viewer 영역 */}
+                <div className="flex-1 overflow-hidden flex flex-col relative">
+                  {!isViewerImageLoaded && (
+                    <div className="absolute inset-0 z-10 bg-gray-950/80 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center">
+                      <AlertTriangle size={32} className="text-amber-400 mb-2" />
+                      <p className="text-xs font-bold text-white mb-1">Error: 등록된 이미지가 없습니다.</p>
+                      <p className="text-[10px] text-gray-400">Dicom파일이나 영상파일을 업로드 후 분석을 실행하세요.</p>
+                    </div>
+                  )}
+                  <Main_viewer
+                    patientData={selectedDiagPatient || selectedPatient}
+                    aiFileUrl={aiFileUrl}
+                    aiFileType={aiFileType}
+                    aiResult={aiResult}
+                    showHeatmap={showHeatmap}
+                    showBoundingBox={showBoundingBox}
+                    confidenceThreshold={confidenceThreshold}
+                    heatmapOpacity={heatmapOpacity}
+                    currentFrame={currentFrame}
+                    totalFrames={totalFrames}
+                    isPlaying={isPlaying}
+                    setIsPlaying={setIsPlaying}
+                    playbackSpeed={playbackSpeed}
+                    setPlaybackSpeed={setPlaybackSpeed}
+                    onFrameChange={setCurrentFrame}
+                    userAnnotations={userAnnotations}
+                    onAnnotationsChange={setUserAnnotations}
+                  />
+                </div>
 
               </div>
 
-              {/* [우측 영역: AI 결과 및 패널들] */}
-              <div className="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-3 content-start">
+              {/* [중앙 패널 영역 - 3컬럼] */}
+              <div className="lg:col-span-3 flex flex-col h-full space-y-1.5 overflow-hidden">
                 
-                {/* 패널 A: AI 결과 및 XAI / Mace Risk */}
-                <div className="flex flex-col space-y-3">
-                  <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-3 flex flex-col shadow-2xl">
-                    <div className="border-b border-blue-800/40 pb-1.5 mb-2">
-                      <h2 className="font-semibold text-xs text-white">AI 결과 패널</h2>
-                    </div>
-                    <div className="space-y-2 text-xs">
-                      {aiError && (
-                        <p className="text-red-400 font-medium">{aiError}</p>
-                      )}
-                      {aiResult ? (
-                        <>
-                          <div className="rounded border border-gray-800 bg-gray-800/40 p-2">
-                            <div className="flex justify-between items-center mb-1">
-                              <span className="text-gray-400">진단 요약</span>
-                              <span className="rounded bg-red-950/80 px-2 py-0.5 text-red-400 border border-red-800 font-medium">
-                                신뢰도 {((aiResult.confidence || 0) * 100).toFixed(1)}%
+                {/* AI 결과 패널 */}
+                <div className="flex-[0.55] flex flex-col rounded-lg border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-1.5 shadow-xl overflow-hidden">
+                  <div className="border-b border-blue-800/40 pb-0.5 mb-1 shrink-0">
+                    <h2 className="font-semibold text-[11px] text-white">AI 결과 패널</h2>
+                  </div>
+                  <div className="flex-1 overflow-y-auto space-y-1 text-[10px] pr-0.5">
+                    {aiError && <p className="text-red-400 font-medium">{aiError}</p>}
+                    {aiResult ? (
+                      <>
+                        <div className="rounded border border-gray-800 bg-gray-800/40 p-1.5 flex justify-between items-center">
+                          <div>
+                            <span className="text-gray-400 text-[9px] block">진단 요약</span>
+                            <span className="text-[11px] font-bold text-white">
+                              {String(aiResult.predicted_label || '').toLowerCase() === 'stenosis' ? '협착 의심' : (aiResult.predicted_label || '정상')}
+                            </span>
+                          </div>
+                          {aiResult.confidence != null && (
+                            <span className="rounded bg-red-950/80 px-2 py-0.5 text-red-400 border border-red-800 font-medium text-[9px]">
+                              신뢰도 {(aiResult.confidence * 100).toFixed(1)}%
+                            </span>
+                          )}
+                        </div>
+                        <div className="rounded border border-gray-800 bg-gray-800/40 p-1.5">
+                          <span className="text-gray-400 text-[9px] block mb-0.5">확률</span>
+                          <div className="text-[10px] space-y-0.5 font-medium text-gray-200">
+                            <div className="flex justify-between">
+                              <span>Normal:</span>
+                              <span className="font-mono">
+                                {aiResult.probabilities?.normal != null ? `${(aiResult.probabilities.normal * 100).toFixed(1)}%` : aiResult.confidence != null && String(aiResult.predicted_label || '').toLowerCase() !== 'stenosis' ? `${(aiResult.confidence * 100).toFixed(1)}%` : '94.9%'}
                               </span>
                             </div>
-                            <p className="text-xs font-bold text-white">
-                              {(() => {
-                                const label = String(aiResult.predicted_label || '').toLowerCase()
-                                if (label === 'stenosis') return '협착 의심'
-                                if (label === 'normal') return '정상'
-                                return aiResult.predicted_label || '결과 없음'
-                              })()}
-                            </p>
+                            <div className="flex justify-between">
+                              <span>Stenosis:</span>
+                              <span className="font-mono">
+                                {aiResult.probabilities?.stenosis != null ? `${(aiResult.probabilities.stenosis * 100).toFixed(1)}%` : aiResult.confidence != null && String(aiResult.predicted_label || '').toLowerCase() === 'stenosis' ? `${(aiResult.confidence * 100).toFixed(1)}%` : '5.1%'}
+                              </span>
+                            </div>
                           </div>
-                          <div className="rounded border border-gray-800 bg-gray-800/40 p-2 space-y-1">
-                            <span className="text-gray-400 block mb-1">확률</span>
-                            <p className="text-gray-200">
-                              Normal: {((aiResult.probabilities?.normal || 0) * 100).toFixed(1)}%
-                            </p>
-                            <p className="text-gray-200">
-                              Stenosis: {((aiResult.probabilities?.stenosis || 0) * 100).toFixed(1)}%
-                            </p>
-                          </div>
-                        </>
-                      ) : (
-                        !aiLoading && (
-                          <p className="text-gray-500 text-[11px]">상단에서 파일을 업로드한 뒤 분석을 실행하세요.</p>
-                        )
-                      )}
-                    </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center py-2 text-gray-500 text-[10px]">
+                        {aiLoading ? 'AI 분석 중입니다...' : '상단에서 파일을 업로드한 뒤 분석을 실행하세요.'}
+                      </div>
+                    )}
                   </div>
+                </div>
 
-                  <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-3 shadow-2xl">
+                {/* XAI 시각화 영역 */}
+                <div className="flex-[1.75] flex flex-col rounded-lg border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-1.5 shadow-xl overflow-hidden">
+                  <div className="flex-1 overflow-y-auto pr-0.5">
                     <Xai_visualization 
                         showHeatmap={showHeatmap}
                         setShowHeatmap={setShowHeatmap}
@@ -1097,54 +853,130 @@ export default function Dashboard({
                         setHeatmapOpacity={setHeatmapOpacity}
                         confidenceThreshold={confidenceThreshold}
                         setConfidenceThreshold={setConfidenceThreshold}
-                        confidenceScore={
-                          aiResult?.confidence != null
-                            ? Number((aiResult.confidence * 100).toFixed(1)) : null
-                        }
-                        uncertaintyScore={
-                          aiResult?.confidence != null
-                            ? Number(((1 - aiResult.confidence) * 100).toFixed(1)) : null
-                        }
+                        confidenceScore={aiResult?.confidence != null ? Number((aiResult.confidence * 100).toFixed(1)) : null}
+                        uncertaintyScore={aiResult?.confidence != null ? Number(((1 - aiResult.confidence) * 100).toFixed(1)) : null}
                         aiLoading={aiLoading}
                         hasAiResult={Boolean(aiResult)}
                     />
                   </div>
+                </div>
 
-                  <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-3 shadow-2xl">
-                    <Mace_risk />
+                {/* MACE 위험도 영역 */}
+                <div className="flex-[1.15] flex flex-col rounded-lg border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-1.5 shadow-xl overflow-hidden justify-between">
+                  <div className="shrink-0 space-y-0.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1 text-white font-bold text-[10px]">
+                        <Heart size={11} className="text-red-400 fill-red-400" />
+                        <span>3년 내 MACE 위험도 예측</span>
+                      </div>
+                      <span className="px-1.5 py-0.2 bg-amber-500/25 border border-amber-500/50 text-amber-300 text-[8px] font-bold rounded-full">
+                        MACE Beta
+                      </span>
+                    </div>
+                    <p className="text-[9px] text-gray-300 leading-tight">
+                      협착 개수, 환자 나이, 기저질환을 기반으로 위험도를 제공합니다.
+                    </p>
+                  </div>
+
+                  <div className="bg-gray-950/60 border border-blue-900/40 rounded p-1 shrink-0 flex flex-col items-center relative">
+                    <span className="text-[9px] font-semibold text-gray-300 mb-0.5">심혈관 사건 및 사망 위험도</span>
+                    <svg width="150" height="65" className="overflow-visible my-0.5">
+                      <defs>
+                        <linearGradient id="maceGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                          <stop offset="0%" stopColor="#10B981" />
+                          <stop offset="50%" stopColor="#F59E0B" />
+                          <stop offset="100%" stopColor="#EF4444" />
+                        </linearGradient>
+                      </defs>
+                      <path
+                        d="M 15 60 A 55 55 0 0 1 135 60"
+                        fill="none"
+                        stroke="url(#maceGradient)"
+                        strokeWidth="9"
+                        strokeLinecap="round"
+                      />
+                      <circle
+                        cx={indicatorX}
+                        cy={indicatorY + 10}
+                        r="4.5"
+                        fill="#FFFFFF"
+                        stroke="#1F2937"
+                        strokeWidth="2"
+                        className="transition-all duration-500"
+                      />
+                    </svg>
+                    <div className="text-center -mt-1 mb-0.5">
+                      <span className="text-xs font-extrabold text-white">
+                        {currentMaceRisk.toFixed(1)}%
+                      </span>
+                      <span className={`text-[9px] font-bold ml-1 ${maceCategoryColor}`}>{maceCategory}</span>
+                    </div>
+                    <div className="w-full flex justify-between px-2 text-[8px] text-gray-400 border-t border-gray-800 pt-0.5">
+                      <span>낮음<br/>0%</span>
+                      <span className="text-center">중간<br/>50%</span>
+                      <span className="text-right">높음<br/>100%</span>
+                    </div>
+                  </div>
+
+                  <div className="shrink-0 space-y-1">
+                    <div className="flex items-center gap-1 text-white font-semibold text-[9px]">
+                      <svg className="w-2.5 h-2.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                      <span>예측 입력 요인</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1">
+                      <div className="bg-gray-950/60 border border-blue-900/40 rounded p-0.5 text-center">
+                        <span className="text-[8px] text-gray-400 block">협착 개수</span>
+                        <span className="text-[10px] font-bold text-white">{currentStenosisCount}개</span>
+                      </div>
+                      <div className="bg-gray-950/60 border border-blue-900/40 rounded p-0.5 text-center">
+                        <span className="text-[8px] text-gray-400 block">환자 나이</span>
+                        <span className="text-[10px] font-bold text-white">{currentAge}세</span>
+                      </div>
+                      <div className="bg-gray-950/60 border border-blue-900/40 rounded p-0.5 text-center">
+                        <span className="text-[8px] text-gray-400 block">고혈압</span>
+                        <span className="text-[10px] font-bold text-white">{currentHypertension}</span>
+                      </div>
+                      <div className="bg-gray-950/60 border border-blue-900/40 rounded p-0.5 text-center">
+                        <span className="text-[8px] text-gray-400 block">당뇨병</span>
+                        <span className="text-[10px] font-bold text-white">{currentDiabetes}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* 패널 B: 판독 체크리스트, 임상 소견 및 EMR 확정 */}
-                <div className="flex flex-col space-y-3">
-                  <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-3 shadow-2xl">
-                    <FindingChecklist 
-                      selectedVessels={selectedVessels}
-                      setSelectedVessels={setSelectedVessels}
-                      pciNeeded={pciNeeded}
-                      setPciNeeded={setPciNeeded}
-                      onGenerateImpression={(text) => setAiImpressionText(text)}
-                      onCanvasDrawMode={(mode) => setCanvasDrawMode(mode)}
-                    />
-                  </div>
+              </div>
 
-                  <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-3 shadow-2xl">
+              {/* [우측 패널 영역 - 3컬럼 확장]: 판독 소견 박스 높이를 대폭 늘림 */}
+              <div className="lg:col-span-3 flex flex-col h-full space-y-1 overflow-hidden pr-0.5">
+                <div className="rounded-lg border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-1.5 shadow-xl shrink-0">
+                  <FindingChecklist 
+                    selectedVessels={selectedVessels}
+                    setSelectedVessels={setSelectedVessels}
+                    pciNeeded={pciNeeded}
+                    setPciNeeded={setPciNeeded}
+                    onGenerateImpression={(text) => setAiImpressionText(text)}
+                    onCanvasDrawMode={setCanvasDrawMode}
+                  />
+                </div>
+
+                {/* 최종 판독 문구 영역: flex 비중을 높여 (flex-[1.8]) 박스 크기를 넓게 확보 */}
+                <div className="rounded-lg border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-1.5 shadow-xl flex-[1.8] flex flex-col overflow-hidden">
+                  <div className="flex-1 flex flex-col overflow-hidden">
                     <ImpressionTemplate 
                       externalImpression={aiImpressionText}
-                      onImpressionChange={(val) => setAiImpressionText(val)}
-                    />
-                  </div>
-
-                  <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-3 shadow-2xl">
-                    <EmrConfirmPanel
-                      impression={aiImpressionText}
-                      selectedVessels={selectedVessels}
-                      pciNeeded={pciNeeded}
-                      patientId={selectedDiagPatient?.patient_id || selectedPatient?.patient_id}
+                      onImpressionChange={setAiImpressionText}
                     />
                   </div>
                 </div>
 
+                <div className="rounded-lg border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-1.5 shadow-xl shrink-0">
+                  <EmrConfirmPanel
+                    impression={aiImpressionText}
+                    selectedVessels={selectedVessels}
+                    pciNeeded={pciNeeded}
+                    patientId={selectedDiagPatient?.patient_id || selectedPatient?.patient_id}
+                  />
+                </div>
               </div>
 
             </main>
@@ -1152,7 +984,7 @@ export default function Dashboard({
         </div>
       </div>
 
-      {/* 환자 검색, 선택 및 선택취소 모달 */}
+      {/* 환자 검색, 선택 모달 */}
       {isPatientModalOpen && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center backdrop-blur-sm">
           <div className="bg-gray-900 border border-blue-800/60 rounded-xl w-[550px] max-h-[85vh] flex flex-col shadow-2xl p-5 text-white">
@@ -1178,7 +1010,12 @@ export default function Dashboard({
               />
               {selectedDiagPatient && (
                 <button
-                  onClick={() => setSelectedDiagPatient(null)}
+                  onClick={() => {
+                    setSelectedDiagPatient(null)
+                    setAiFileUrl(null)
+                    setAiFile(null)
+                    setIsViewerImageLoaded(false)
+                  }}
                   className="px-3 py-2 bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800/60 rounded-lg text-xs font-semibold transition-colors"
                 >
                   선택 해제

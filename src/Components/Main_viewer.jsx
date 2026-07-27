@@ -424,7 +424,7 @@ function Main_viewer({
 
     if (!patientData) {
         return (
-            <section className="flex h-full min-h-[400px] flex-col items-center justify-center rounded-lg border border-gray-800 bg-gray-900 text-gray-400">
+            <section className="flex h-full min-h-[100px] flex-col items-center justify-center rounded-lg border border-gray-800 bg-gray-900 text-gray-400">
                 <div className="flex flex-col items-center gap-3 p-6 text-center">
                     <div className="rounded-full bg-gray-800 p-3 text-blue-500">
                         <FolderSearch size={30} />
