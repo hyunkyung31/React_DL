@@ -246,7 +246,6 @@ export default function Dashboard({
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackSpeed, setPlaybackSpeed] = useState('1.0x')
   const [selectedSeries, setSelectedSeries] = useState('Default Angio 01')
-  const thumbnailFrames = [1, 5, 10, 15, 20, 25, 30]
 
   // AI진단 (predict)
   const [aiFile, setAiFile] = useState(null)
@@ -294,22 +293,23 @@ export default function Dashboard({
   const [canvasAnnotations, setCanvasAnnotations] = useState([]) 
   const [currentBBox, setCurrentBBox] = useState(null) 
 
+  // Main_viewer 컴포넌트와 연동할 의사 커스텀 주석 상태 관리
+  const [userAnnotations, setUserAnnotations] = useState([])
+
   // 비디오 첫 프레임(썸네일) 설정 및 끝 재생 처리
-useEffect(() => {
+  useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
     const handleEnded = () => {
       setIsPlaying(false);
-      video.currentTime = video.duration || 0; // 끝까지 재생되면 마지막 시점으로 고정
+      video.currentTime = video.duration || 0; 
     };
 
     const handleTimeUpdate = () => {
-      // 비디오 실제 재생 시간에 맞춰 currentFrame을 동기화하고 싶다면 여기서 처리할 수도 있습니다.
       if (video.duration && !isNaN(video.duration)) {
         const progress = video.currentTime / video.duration;
         const calculatedFrame = Math.min(totalFrames, Math.max(1, Math.floor(progress * totalFrames) + 1));
-        // 만약 수동 프레임 조작과 충돌이 난다면 이 부분은 제외하고 아래 자동 재생 타이머만 사용하세요.
       }
     };
 
@@ -321,7 +321,6 @@ useEffect(() => {
       video.removeEventListener('timeupdate', handleTimeUpdate);
     };
   }, [aiFileUrl, totalFrames]);
-
 
   // 하단 재생 버튼 상태와 실제 비디오 재생 동기화
   useEffect(() => {
@@ -382,11 +381,10 @@ useEffect(() => {
     return () => clearInterval(timer)
   }, [isPlaying, playbackSpeed, totalFrames])
 
-const handleFrameChange = (newFrame) => {
+  const handleFrameChange = (newFrame) => {
     setCurrentFrame(newFrame);
     const video = videoRef.current;
     if (video && !isNaN(video.duration) && video.duration > 0) {
-      // 전체 프레임 수 대비 비율을 계산하여 비디오의 currentTime 설정
       const targetTime = ((newFrame - 1) / (totalFrames - 1)) * video.duration;
       video.currentTime = targetTime;
     }
@@ -520,7 +518,7 @@ const handleFrameChange = (newFrame) => {
 
   // 마우스 상호작용 핸들러
   const handleMouseDown = (e) => {
-    if (!aiFileUrl) return // 파일이 없으면 뷰어 인터랙션 차단
+    if (!aiFileUrl) return
     const rect = viewerContainerRef.current.getBoundingClientRect()
     const startX = e.clientX - rect.left
     const startY = e.clientY - rect.top
@@ -596,17 +594,6 @@ const handleFrameChange = (newFrame) => {
       setScale(prev => Math.min(prev + zoomIntensity, 3))
     } else {
       setScale(prev => Math.max(prev - zoomIntensity, 0.5))
-    }
-  }
-
-  const handleToggleFullscreen = () => {
-    if (!viewerContainerRef.current) return
-    if (!document.fullscreenElement) {
-      viewerContainerRef.current.requestFullscreen().catch(err => {
-        console.error("전체화면 전환 실패:", err)
-      })
-    } else {
-      document.exitFullscreen()
     }
   }
 
@@ -780,13 +767,6 @@ const handleFrameChange = (newFrame) => {
       }
       if (!response.ok) {
         const errorData = await response.json().catch(() => null)
-
-        console.error('이미지 통합 API 오류:', {
-          status: response.status,
-          statusText: response.statusText,
-          data: errorData,
-        })
-
         throw new Error(errorData?.detail || `AI 분석 요청 실패 (${response.status})`)
       }
       const data = await response.json()
@@ -954,35 +934,35 @@ const handleFrameChange = (newFrame) => {
               onSelectBookmark={(item) => console.log('선택된 북마크 항목:', item)} 
             />
           ) : (
-            <main className="flex-1 p-4 overflow-y-auto grid grid-cols-1 lg:grid-cols-3 gap-4" style={{ backgroundColor: '#060B18' }}>
+            <main className="flex-1 p-4 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-4" style={{ backgroundColor: '#060B18' }}>
               
-              {/* 좌측 메인 영역 (뷰어 + 타임라인) */}
-              <div className="lg:col-span-2 flex flex-col space-y-4">
+              {/* [좌측 영역: 메인 뷰어 및 재생 컨트롤 통합] */}
+              <div className="lg:col-span-7 flex flex-col space-y-3">
                 
-                {/* 상단 환자 선택 및 업로드 바 (AI 분석 실행 버튼 이동 위치) */}
-                <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-3.5 flex flex-col md:flex-row md:items-center md:justify-between gap-3 shadow-xl">
-                  <div className="flex items-center gap-2.5">
+                {/* 환자 선택 및 업로드 바 */}
+                <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-3 flex flex-col gap-2.5 shadow-xl">
+                  <div className="flex items-center justify-between gap-2">
                     <button
                       onClick={() => setIsPatientModalOpen(true)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-950 hover:bg-blue-900 text-blue-200 border border-blue-700/60 rounded text-xs font-semibold shadow-inner"
+                      className="flex items-center gap-1.5 px-3 py-1 bg-blue-950 hover:bg-blue-900 text-blue-200 border border-blue-700/60 rounded text-xs font-semibold shadow-inner"
                     >
                       <UserCheck size={14} className="text-blue-400" />
-                      <span>{selectedDiagPatient ? '환자 변경/해제' : '환자 검색 및 선택'}</span>
+                      <span>{selectedDiagPatient ? '환자 변경' : '환자 검색'}</span>
                     </button>
                     {selectedDiagPatient ? (
-                      <div className="flex items-center gap-2 bg-blue-900/40 border border-blue-700/50 px-3 py-1 rounded text-xs text-white">
-                        <span>대상: <strong className="text-blue-300">{selectedDiagPatient.patient_name}</strong> ({selectedDiagPatient.patient_id})</span>
-                        <button onClick={() => setSelectedDiagPatient(null)} className="text-red-400 hover:text-red-300 font-bold ml-1" title="선택 취소">✕</button>
+                      <div className="flex items-center gap-2 bg-blue-900/40 border border-blue-700/50 px-2.5 py-0.5 rounded text-xs text-white truncate">
+                        <span className="truncate"><strong className="text-blue-300">{selectedDiagPatient.patient_name}</strong></span>
+                        <button onClick={() => setSelectedDiagPatient(null)} className="text-red-400 hover:text-red-300 font-bold ml-1 shrink-0" title="선택 취소">✕</button>
                       </div>
                     ) : (
-                      <span className="text-xs text-gray-400">선택된 환자 없음</span>
+                      <span className="text-xs text-gray-400">선택 환자 없음</span>
                     )}
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <label className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-blue-200 border border-blue-800/50 rounded text-xs font-semibold cursor-pointer shadow-md">
+                    <label className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-blue-200 border border-blue-800/50 rounded text-xs font-semibold cursor-pointer shadow-md">
                       <Upload size={13} />
-                      <span>영상/이미지 업로드</span>
+                      <span>파일 업로드</span>
                       <input type="file" accept="image/*,video/*" onChange={(e) => handleFileUpload(e.target.files?.[0])} className="hidden" />
                     </label>
                     <button
@@ -991,361 +971,134 @@ const handleFrameChange = (newFrame) => {
                       disabled={aiLoading || !aiFile}
                       className="px-3.5 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold disabled:opacity-50 shadow-md shadow-blue-600/30"
                     >
-                      {aiLoading ? '분석 중...' : 'AI 분석 실행'}
+                      {aiLoading ? '분석 중...' : 'AI 분석'}
                     </button>
                   </div>
                 </div>
 
-                {/* 뷰어 (드래그 앤 드롭 대상) */}
-                <div 
-                  ref={viewerContainerRef} 
-                  className={`flex-1 min-h-[380px] rounded-xl border backdrop-blur-md flex flex-col overflow-hidden shadow-2xl relative transition-colors ${
-                    isMainDragOver ? 'border-blue-500 bg-blue-950/40' : 'border-blue-800/40 bg-gray-900/60'
-                  }`}
-                  onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsMainDragOver(true); }}
-                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsMainDragOver(true); }}
-                  onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsMainDragOver(false); }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setIsMainDragOver(false);
-                    const file = e.dataTransfer.files?.[0];
-                    handleFileUpload(file);
-                  }}
-                >
-                  <div className="flex items-center justify-between border-b border-blue-800/40 px-4 py-2.5 bg-blue-950/40">
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-semibold text-white">영상 뷰어</span>
-                      <div className="flex bg-gray-950 rounded border border-blue-800/50 p-0.5 text-xs">
-                        {['Default Angio 01', 'Coronary LCA', 'RCA Segment 2'].map((clip) => (
-                          <button
-                            key={clip}
-                            onClick={() => {
-                              setSelectedSeries(clip)
-                              setAiFileUrl(null)
-                              setAiFileType('image')
-                              setIsPlaying(false)
-                              setScale(1)
-                              setPosition({ x: 0, y: 0 })
-                            }}
-                            className={`px-2.5 py-1 rounded transition-colors ${selectedSeries === clip ? 'bg-blue-600 text-white font-semibold' : 'text-gray-400 hover:text-white'}`}
-                          >
-                            {clip}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                {/* Main_viewer 컴포넌트 장착부 (커스텀 주석 콜백 연동) */}
+                <Main_viewer
+                  patientData={selectedDiagPatient || selectedPatient}
+                  aiFileUrl={aiFileUrl}
+                  aiFileType={aiFileType}
+                  aiResult={aiResult}
+                  overlayMode={overlayMode}
+                  confidenceThreshold={confidenceThreshold}
+                  heatmapOpacity={heatmapOpacity}
+                  currentFrame={currentFrame}
+                  totalFrames={totalFrames}
+                  isPlaying={isPlaying}
+                  setIsPlaying={setIsPlaying}
+                  playbackSpeed={playbackSpeed}
+                  setPlaybackSpeed={setPlaybackSpeed}
+                  onFrameChange={handleFrameChange}
+                  userAnnotations={userAnnotations}
+                  onAnnotationsChange={(updatedAnnotations) => setUserAnnotations(updatedAnnotations)}
+                />
 
-                    <div className="flex items-center gap-2 text-xs text-gray-200">
-                      <button onClick={() => setScale(prev => Math.min(prev + 0.25, 3))} className="flex items-center gap-1 px-2.5 py-1 rounded bg-gray-900 border border-blue-800/50 hover:bg-blue-900/50">
-                        <ZoomIn size={14} /> 줌인
-                      </button>
-                      <button onClick={() => setScale(prev => Math.max(prev - 0.25, 0.5))} className="flex items-center gap-1 px-2.5 py-1 rounded bg-gray-900 border border-blue-800/50 hover:bg-blue-900/50">
-                        <ZoomOut size={14} /> 축소
-                      </button>
-                      <span className="font-mono text-blue-300 px-1">{Math.round(scale * 100)}%</span>
-                      <button onClick={() => { setScale(1); setPosition({x:0, y:0}); }} className="px-2 py-1 rounded bg-gray-900 border border-blue-800/50 hover:bg-blue-900/50">
-                        초기화
-                      </button>
-                      <button onClick={handleToggleFullscreen} className="flex items-center gap-1 px-2.5 py-1 rounded bg-gray-900 border border-blue-800/50 hover:bg-blue-900/50">
-                        <Maximize2 size={14} /> 전체화면
-                      </button>
-                    </div>
-                  </div>
+              </div>
 
-                  <div 
-                    className="flex-1 relative flex items-center justify-center bg-gray-950/90 overflow-hidden select-none cursor-grab active:cursor-grabbing"
-                    onMouseDown={handleMouseDown}
-                    onMouseMove={handleMouseMove}
-                    onMouseUp={handleMouseUp}
-                    onMouseLeave={handleMouseUp}
-                    onWheel={handleWheel}
-                  >
-                    <div className="absolute left-4 top-4 z-10 space-y-0.5 text-xs text-blue-200 font-mono pointer-events-none drop-shadow">
-                      <p>Patient ID : {selectedDiagPatient ? selectedDiagPatient.patient_id : (selectedPatient ? selectedPatient.patient_id : '00012345')}</p>
-                      <p>Study Date : 2026-07-26</p>
-                      <p>Series : {selectedSeries}</p>
+              {/* [우측 영역: AI 결과 및 패널들] */}
+              <div className="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-3 content-start">
+                
+                {/* 패널 A: AI 결과 및 XAI / Mace Risk */}
+                <div className="flex flex-col space-y-3">
+                  <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-3 flex flex-col shadow-2xl">
+                    <div className="border-b border-blue-800/40 pb-1.5 mb-2">
+                      <h2 className="font-semibold text-xs text-white">AI 결과 패널</h2>
                     </div>
-                    <div className="absolute right-4 top-4 z-10 space-y-0.5 text-right text-xs text-blue-200 font-mono pointer-events-none drop-shadow">
-                      <p>Frame : {currentFrame} / {totalFrames}</p>
-                      <p>LAO 45° / CRAN 20°</p>
-                    </div>
-
-                    <div
-                      className="relative inline-block max-h-full max-w-full flex items-center justify-center w-full h-full"
-                      style={{
-                        transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-                        transformOrigin: 'center center',
-                        transition: isDragging ? 'none' : 'transform 0.1s ease-out',
-                      }}
-                    >
-                      {aiFileUrl ? (
-                        aiFileType === 'video' ? (
-                          <video 
-                            ref={videoRef}
-                            src={aiFileUrl} 
-                            preload="metadata"
-                            playsInline
-                            muted
-                            loop={false}
-                            onLoadedMetadata={(e) => {
-                              setIsViewerImageLoaded(true);
-                              e.target.currentTime = 0;
-                            }}
-                            className="max-h-full max-w-full object-contain pointer-events-auto"
-                          />
-                        ) : (
-                          <img
-                            ref={viewerImageRef}
-                            src={aiFileUrl}
-                            alt="업로드된 영상"
-                            onLoad={() => setIsViewerImageLoaded(true)}
-                            className="block max-h-full max-w-full object-contain pointer-events-none"
-                            draggable={false}
-                          />
-                        )
-                      ) : (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-4 z-10 opacity-90">
-                        <div className="bg-gray-900/90 border border-blue-500/50 p-6 rounded-xl shadow-2xl flex flex-col items-center text-center max-w-sm backdrop-blur-md">
-                          <Upload className="text-blue-400 mb-2 animate-bounce" size={32} />
-                          <p className="text-sm font-bold text-white mb-1">이미지를 업로드해주세요</p>
-                          <p className="text-xs text-gray-300">분석할 이미지 또는 영상을 이곳에 드래그하여 놓아주세요.</p>
-                        </div>
-                      </div>
+                    <div className="space-y-2 text-xs">
+                      {aiError && (
+                        <p className="text-red-400 font-medium">{aiError}</p>
                       )}
-
-                      {aiFileUrl && overlayMode === 'heatmap' && aiResult && xaiData.showGradcam && xaiData.heatmapBase64 && (
-                        <img
-                          src={`data:image/png;base64,${aiResult.overlay_base64}`}
-                          alt="Grad-CAM Heatmap"
-                          className="pointer-events-none absolute inset-0 h-full w-full object-contain"
-                          style={{ opacity: heatmapOpacity / 100 }} 
-                        />
-                      )}
-
-                      <canvas
-                        ref={boundingBoxCanvasRef}
-                        className="pointer-events-none absolute left-0 top-0 h-full w-full"
-                        aria-label="AI Bounding Box"
-                      />
-                      {aiFileUrl && (
+                      {aiResult ? (
                         <>
-                          <canvas
-                            ref={heatmapCanvasRef}
-                            className="pointer-events-none absolute left-0 top-0 h-full w-full"
-                            aria-label="임시 AI Heatmap"
-                          />
-                          <canvas
-                            ref={boundingBoxCanvasRef}
-                            className="pointer-events-none absolute left-0 top-0 h-full w-full"
-                            aria-label="AI Bounding Box"
-                          />
+                          <div className="rounded border border-gray-800 bg-gray-800/40 p-2">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-gray-400">진단 요약</span>
+                              <span className="rounded bg-red-950/80 px-2 py-0.5 text-red-400 border border-red-800 font-medium">
+                                신뢰도 {((aiResult.confidence || 0) * 100).toFixed(1)}%
+                              </span>
+                            </div>
+                            <p className="text-xs font-bold text-white">
+                              {aiResult.predicted_label === 'Stenosis' ? '협착 의심' : '정상'}
+                            </p>
+                          </div>
+                          <div className="rounded border border-gray-800 bg-gray-800/40 p-2 space-y-1">
+                            <span className="text-gray-400 block mb-1">확률</span>
+                            <p className="text-gray-200">
+                              Normal: {((aiResult.probabilities?.normal || 0) * 100).toFixed(1)}%
+                            </p>
+                            <p className="text-gray-200">
+                              Stenosis: {((aiResult.probabilities?.stenosis || 0) * 100).toFixed(1)}%
+                            </p>
+                          </div>
                         </>
+                      ) : (
+                        !aiLoading && (
+                          <p className="text-gray-500 text-[11px]">상단에서 파일을 업로드한 뒤 분석을 실행하세요.</p>
+                        )
                       )}
                     </div>
-
-                    {/* Canvas 상의 인터랙티브 BBox & Text 오버레이 */}
-                    {canvasAnnotations
-                      .filter(item => item.frame === currentFrame)
-                      .map(item => (
-                        item.type === 'bbox' ? (
-                          <div
-                            key={item.id}
-                            style={{ left: item.startX, top: item.startY, width: item.width, height: item.height }}
-                            className="absolute border-2 border-cyan-400 bg-cyan-500/20 z-30 pointer-events-none shadow-lg"
-                          >
-                            <span className="absolute -top-5 left-0 bg-cyan-500 text-black text-[10px] font-bold px-1 rounded">
-                              BBox Area
-                            </span>
-                          </div>
-                        ) : (
-                          <div
-                            key={item.id}
-                            style={{ left: item.x, top: item.y }}
-                            className="absolute z-30 transform -translate-x-1/2 -translate-y-1/2 bg-amber-500/90 text-black px-2 py-0.5 rounded text-xs font-bold shadow-lg border border-amber-300 pointer-events-none animate-bounce"
-                          >
-                            ✍️ {item.text}
-                          </div>
-                        )
-                      ))}
-
-                    {currentBBox && (
-                      <div
-                        style={{ left: currentBBox.startX, top: currentBBox.startY, width: currentBBox.width, height: currentBBox.height }}
-                        className="absolute border-2 border-dashed border-red-500 bg-red-500/20 z-30 pointer-events-none"
-                      />
-                    )}
-
-                    <button onClick={(e) => { e.stopPropagation(); setCurrentFrame(prev => Math.max(prev - 1, 1)); }} className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-gray-900/80 border border-blue-800/50 p-2 text-white hover:bg-gray-900 z-20 shadow-lg">
-                      <ChevronLeft size={20} />
-                    </button>
-                    <button onClick={(e) => { e.stopPropagation(); setCurrentFrame(prev => Math.min(prev + 1, totalFrames)); }} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-gray-900/80 border border-blue-800/50 p-2 text-white hover:bg-gray-900 z-20 shadow-lg">
-                      <ChevronRight size={20} />
-                    </button>
                   </div>
-                </div>
 
-                {/* 재생 컨트롤 / 썸네일 타임라인 */}
-                <div className="flex flex-col gap-3 rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-3.5 shrink-0 shadow-xl">
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => { setIsPlaying(false); handleFrameChange(1); }} className="p-1.5 text-gray-200 hover:text-white" title="처음으로"><SkipBack size={16} /></button>
-                    <button onClick={() => handleFrameChange(Math.max(1, currentFrame - 1))} className="p-1.5 text-gray-200 hover:text-white" title="이전 프레임"><ChevronLeft size={16} /></button>
-                    <button onClick={() => setIsPlaying(!isPlaying)} className="rounded bg-gradient-to-r from-blue-600 to-indigo-600 p-1.5 text-white hover:opacity-90 shadow-md shadow-blue-600/30" title={isPlaying ? "일시정지" : "재생"}>
-                      {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-                    </button>
-                    <button onClick={() => { setIsPlaying(false); handleFrameChange(1); }} className="p-1.5 text-gray-200 hover:text-white" title="정지"><Square size={14} /></button>
-                    <button onClick={() => handleFrameChange(Math.min(totalFrames, currentFrame + 1))} className="p-1.5 text-gray-200 hover:text-white" title="다음 프레임"><ChevronRight size={16} /></button>
-                    <button onClick={() => { setIsPlaying(false); handleFrameChange(totalFrames); }} className="p-1.5 text-gray-200 hover:text-white" title="마지막으로"><SkipForward size={16} /></button>
-                    
-                    <button className="p-1.5 text-gray-300 hover:text-white"><Volume2 size={16} /></button>
-                    
-                    <span className="text-xs text-blue-300 font-mono min-w-[70px] text-center">{currentFrame} / {totalFrames}</span>
-                    
-                    <input 
-                      type="range" min="1" max={totalFrames} value={currentFrame} 
-                      onChange={(e) => { setIsPlaying(false); handleFrameChange(Number(e.target.value)); }}
-                      className="flex-1 h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-blue-500 shadow-inner" 
+                  <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-3 shadow-2xl">
+                    <Xai_visualization 
+                        overlayMode={overlayMode}
+                        setOverlayMode={setOverlayMode}
+                        heatmapOpacity={heatmapOpacity}
+                        setHeatmapOpacity={setHeatmapOpacity}
+                        confidenceThreshold={confidenceThreshold}
+                        setConfidenceThreshold={setConfidenceThreshold}
+                        confidenceScore={
+                          aiResult?.confidence != null
+                            ? Number((aiResult.confidence * 100).toFixed(1)) : null
+                        }
+                        uncertaintyScore={
+                          aiResult?.confidence != null
+                            ? Number(((1 - aiResult.confidence) * 100).toFixed(1)) : null
+                        }
+                        aiLoading={aiLoading}
+                        hasAiResult={Boolean(aiResult)}
                     />
-
-                    <select 
-                      value={playbackSpeed} 
-                      onChange={(e) => setPlaybackSpeed(e.target.value)}
-                      className="rounded border border-blue-800/50 bg-gray-900 px-2 py-1 text-xs text-gray-200 outline-none focus:border-blue-400"
-                    >
-                      <option value="0.5x">0.5x</option>
-                      <option value="1.0x">1.0x</option>
-                      <option value="2.0x">2.0x</option>
-                    </select>
                   </div>
 
-                  <div className="pt-2 border-t border-blue-900/30 flex items-center gap-2">
-                    <button onClick={() => handleFrameChange(Math.max(1, currentFrame - 1))} className="p-1 rounded bg-gray-900 border border-blue-800/40 text-gray-200 hover:bg-blue-900/50 shrink-0">
-                      <ChevronLeft size={16} />
-                    </button>
+                  <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-3 shadow-2xl">
+                    <Mace_risk />
+                  </div>
+                </div>
 
-                    <div className="flex-1 flex items-center gap-2 overflow-x-auto py-1 scrollbar-thin">
-                      {thumbnailFrames.map((targetFr) => {
-                        const isSelected = targetFr === currentFrame
-                        return (
-                          <div 
-                            key={targetFr}
-                            onClick={() => { setIsPlaying(false); handleFrameChange(targetFr); }}
-                            className={`relative flex-1 min-w-[55px] h-12 rounded bg-gray-900 border cursor-pointer overflow-hidden transition-all shadow-md ${
-                              isSelected ? 'border-blue-400 ring-2 ring-blue-500/40 scale-105' : 'border-blue-900/50 opacity-70 hover:opacity-100 hover:border-blue-600'
-                            }`}
-                          >
-                            <img src={angioImage} alt={`프레임 ${targetFr}`} className="w-full h-full object-cover" />
-                            <span className="absolute bottom-0.5 right-1 text-[9px] font-mono bg-gray-900/90 px-1 rounded text-blue-200 border border-blue-800/40">
-                              F{targetFr}
-                            </span>
-                          </div>
-                        )
-                      })}
-                    </div>
+                {/* 패널 B: 판독 체크리스트, 임상 소견 및 EMR 확정 */}
+                <div className="flex flex-col space-y-3">
+                  <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-3 shadow-2xl">
+                    <FindingChecklist 
+                      selectedVessels={selectedVessels}
+                      setSelectedVessels={setSelectedVessels}
+                      pciNeeded={pciNeeded}
+                      setPciNeeded={setPciNeeded}
+                      onGenerateImpression={(text) => setAiImpressionText(text)}
+                      onCanvasDrawMode={(mode) => setCanvasDrawMode(mode)}
+                    />
+                  </div>
 
-                    <button onClick={() => handleFrameChange(Math.min(totalFrames, currentFrame + 1))} className="p-1 rounded bg-gray-900 border border-blue-800/40 text-gray-200 hover:bg-blue-900/50 shrink-0">
-                      <ChevronRight size={16} />
-                    </button>
+                  <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-3 shadow-2xl">
+                    <ImpressionTemplate 
+                      externalImpression={aiImpressionText}
+                      onImpressionChange={(val) => setAiImpressionText(val)}
+                    />
+                  </div>
+
+                  <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-3 shadow-2xl">
+                    <EmrConfirmPanel
+                      impression={aiImpressionText}
+                      selectedVessels={selectedVessels}
+                      pciNeeded={pciNeeded}
+                    />
                   </div>
                 </div>
 
               </div>
 
-              {/* 우측 패널 영역 */}
-              <div className="flex flex-col space-y-4">
-                <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-4 flex flex-col shadow-2xl">
-                  <div className="border-b border-blue-800/40 pb-3 mb-3">
-                    <h2 className="font-semibold text-sm text-white">AI 결과 패널</h2>
-                  </div>
-                  <div className="space-y-3 text-xs">
-                    {aiError && (
-                      <p className="text-red-400 font-medium">{aiError}</p>
-                    )}
-                    {aiResult ? (
-                      <>
-                        <div className="rounded border border-gray-800 bg-gray-800/40 p-3">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-gray-400">진단 요약</span>
-                            <span className="rounded bg-red-950/80 px-2 py-0.5 text-red-400 border border-red-800 font-medium">
-                              신뢰도 {((aiResult.confidence || 0) * 100).toFixed(1)}%
-                            </span>
-                          </div>
-                          <p className="text-sm font-bold text-white">
-                            {aiResult.predicted_label === 'Stenosis' ? '협착 의심' : '정상'}
-                          </p>
-                        </div>
-                        <div className="rounded border border-gray-800 bg-gray-800/40 p-3 space-y-1">
-                          <span className="text-gray-400 block mb-1">확률</span>
-                          <p className="text-gray-200">
-                            Normal: {((aiResult.probabilities?.normal || 0) * 100).toFixed(1)}%
-                          </p>
-                          <p className="text-gray-200">
-                            Stenosis: {((aiResult.probabilities?.stenosis || 0) * 100).toFixed(1)}%
-                          </p>
-                        </div>
-                      </>
-                    ) : (
-                      !aiLoading && (
-                        <p className="text-gray-500">상단에서 파일을 업로드한 뒤 분석을 실행하세요.</p>
-                      )
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <Xai_visualization 
-                      overlayMode={overlayMode}
-                      setOverlayMode={setOverlayMode}
-                      heatmapOpacity={heatmapOpacity}
-                      setHeatmapOpacity={setHeatmapOpacity}
-                      confidenceThreshold={confidenceThreshold}
-                      setConfidenceThreshold={setConfidenceThreshold}
-                      confidenceScore={
-                        aiResult?.confidence != null
-                          ? Number((aiResult.confidence * 100).toFixed(1)) : null
-                      }
-                      uncertaintyScore={
-                        aiResult?.confidence != null
-                          ? Number(((1 - aiResult.confidence) * 100).toFixed(1)) : null
-                      }
-                      aiLoading={aiLoading}
-                      hasAiResult={Boolean(aiResult)}
-                  />
-                </div>
-                <div className="mt-4">
-                  <Mace_risk />
-                </div>
-
-                {/* 판독 체크리스트 */}
-                <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-4 shadow-2xl">
-                  <FindingChecklist 
-                    selectedVessels={selectedVessels}
-                    setSelectedVessels={setSelectedVessels}
-                    pciNeeded={pciNeeded}
-                    setPciNeeded={setPciNeeded}
-                    onGenerateImpression={(text) => setAiImpressionText(text)}
-                    onCanvasDrawMode={(mode) => setCanvasDrawMode(mode)}
-                  />
-                </div>
-
-                {/* 임상 소견 템플릿 */}
-                <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-4 shadow-2xl">
-                  <ImpressionTemplate 
-                    externalImpression={aiImpressionText}
-                    onImpressionChange={(val) => setAiImpressionText(val)}
-                  />
-                </div>
-
-                {/* EMR 최종 확정 패널 */}
-                <div className="rounded-xl border border-blue-800/40 bg-gray-900/60 backdrop-blur-md p-4 shadow-2xl">
-                  <EmrConfirmPanel
-                    impression={aiImpressionText}
-                    selectedVessels={selectedVessels}
-                    pciNeeded={pciNeeded}
-                  />
-                </div>
-
-              </div>
             </main>
           )}
         </div>
