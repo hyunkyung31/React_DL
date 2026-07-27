@@ -65,7 +65,20 @@ function App() {
     if (!access) return
 
     fetchBookmarks()
-      .then((list) => setBookmarks(list))
+      .then((list) => {
+        let cache: Record<string, string> = {}
+        try {
+          cache = JSON.parse(localStorage.getItem('bookmark_snapshots') || '{}')
+        } catch (_) {
+          cache = {}
+        }
+        setBookmarks(
+          list.map((b) => ({
+            ...b,
+            snapshotUrl: b.snapshotUrl || cache[String(b.id)] || null,
+          })),
+        )
+      })
       .catch((err) => {
         console.error(err)
         setErrorMessage('북마크 목록을 불러오지 못했습니다.')
@@ -82,7 +95,21 @@ function App() {
         frameNumber: item.frameNumber,
         bboxData: item.bboxData ?? [],
       })
-      setBookmarks((prev) => [created, ...prev])
+      // API는 snapshot_path만 받으므로, 캔버스 data URL은 클라이언트에 보존
+      const withSnapshot = {
+        ...created,
+        snapshotUrl: item.snapshotUrl || created.snapshotUrl || null,
+      }
+      if (withSnapshot.id && withSnapshot.snapshotUrl) {
+        try {
+          const cache = JSON.parse(localStorage.getItem('bookmark_snapshots') || '{}')
+          cache[String(withSnapshot.id)] = withSnapshot.snapshotUrl
+          localStorage.setItem('bookmark_snapshots', JSON.stringify(cache))
+        } catch (_) {
+          /* ignore quota */
+        }
+      }
+      setBookmarks((prev) => [withSnapshot, ...prev])
     } catch (err) {
       console.error(err)
       alert('북마크 저장에 실패했습니다.')

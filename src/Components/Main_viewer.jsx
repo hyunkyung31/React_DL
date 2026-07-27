@@ -41,17 +41,14 @@ function Main_viewer({
 
     const imageRef = useRef(null)
     const overlayCanvasRef = useRef(null)
+    const heatmapImageRef = useRef(null)
+    const heatmapSrcRef = useRef(null)
 
     const [position, setPosition] = useState({ x: 0, y: 0 })
     const dragStartRef = useRef({ mouseX: 0, mouseY: 0, imageX: 0, imageY: 0 })
     const viewerRef = useRef(null)
 
     const totalFrames = 250
-
-    const mockBoundingBoxes = [
-        { id: 1, x: 100, y: 100, width: 200, height: 200, label: 'Stenosis', confidence: 0.92 },
-        { id: 2, x: 365, y: 310, width: 105, height: 80, label: 'Stenosis', confidence: 0.81 },
-    ]
 
     // 환자 데이터 변경 시 초기화
     useEffect(() => {
@@ -61,11 +58,15 @@ function Main_viewer({
         setPosition({ x: 0, y: 0 })
         setUserAnnotations([])
         setActiveTool(null)
+        heatmapImageRef.current = null
+        heatmapSrcRef.current = null
     }, [patientData])
 
     // 부모에서 GCS key_frame / 업로드 URL이 바뀌면 다시 로드
     useEffect(() => {
         setIsImageLoaded(false)
+        heatmapImageRef.current = null
+        heatmapSrcRef.current = null
     }, [aiFileUrl])
 
     useEffect(() => {
@@ -96,6 +97,7 @@ function Main_viewer({
     }, [])
 
     // AI 히트맵 / 바운딩박스 + 사용자 주석 캔버스
+    // 히트맵·박스는 서로 독립 토글. 박스 토글 시 히트맵을 다시 깨지 않도록 이미지 캐시.
     useEffect(() => {
         const image = imageRef.current
         const canvas = overlayCanvasRef.current
@@ -103,7 +105,6 @@ function Main_viewer({
         if (!image || !canvas || !isImageLoaded) return
 
         let cancelled = false
-        let heatmapImage = null
 
         const toDataUrl = (value) => {
             if (!value) return null
@@ -112,12 +113,14 @@ function Main_viewer({
         }
 
         const heatmapSrc = toDataUrl(
-            aiResult?.heatmap_base64 || aiResult?.overlay_base64
+            aiResult?.heatmap_base64
+            || aiResult?.overlay_base64
+            || aiResult?.classification?.heatmap_base64
+            || aiResult?.classification?.overlay_base64
         )
 
-        const boxes = aiResult
-            ? (aiResult.bounding_boxes || aiResult.boxes || [])
-            : mockBoundingBoxes
+        const boxes = aiResult?.bounding_boxes || aiResult?.boxes || []
+        const threshold = confidenceThreshold ?? 25
 
         const drawAnnotations = (context) => {
             userAnnotations.forEach((ann) => {
@@ -132,7 +135,7 @@ function Main_viewer({
                     context.font = 'bold 11px sans-serif'
                     context.fillText('Dr. Annotation', ann.x + 4, Math.max(ann.y - 4, 12))
                 } else if (ann.type === 'pen' && ann.path && ann.path.length > 0) {
-                    context.strokeStyle = '#10b981'
+                    context.strokeStyle = '#dd0202'
                     context.lineWidth = 3
                     context.lineCap = 'round'
                     context.beginPath()
@@ -168,7 +171,8 @@ function Main_viewer({
             context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
             context.clearRect(0, 0, imageWidth, imageHeight)
 
-            // 1. Grad-CAM heatmap
+            // 1. Grad-CAM heatmap (독립 토글)
+            const heatmapImage = heatmapImageRef.current
             if (showHeatmap && heatmapImage) {
                 context.save()
                 context.globalAlpha = Math.max(0, Math.min(1, (heatmapOpacity || 0) / 100))
@@ -176,13 +180,13 @@ function Main_viewer({
                 context.restore()
             }
 
-            // 2. AI Bounding Box
+            // 2. AI Bounding Box (독립 토글)
             if (showBoundingBox) {
                 const scaleX = image.naturalWidth ? imageWidth / image.naturalWidth : 1
                 const scaleY = image.naturalHeight ? imageHeight / image.naturalHeight : 1
 
                 boxes
-                    .filter((box) => (box.confidence ?? 0) * 100 >= confidenceThreshold)
+                    .filter((box) => (box.confidence ?? 0) * 100 >= threshold)
                     .forEach((box) => {
                         const boxX = (box.x ?? 0) * scaleX
                         const boxY = (box.y ?? 0) * scaleY
@@ -210,21 +214,34 @@ function Main_viewer({
             drawAnnotations(context)
         }
 
-        if (showHeatmap && heatmapSrc) {
+        const ensureHeatmapThenDraw = () => {
+            if (!showHeatmap || !heatmapSrc) {
+                drawCanvasContent()
+                return
+            }
+
+            // 같은 src면 재로딩하지 않고 캐시 사용
+            if (heatmapSrcRef.current === heatmapSrc && heatmapImageRef.current) {
+                drawCanvasContent()
+                return
+            }
+
             const loader = new Image()
             loader.onload = () => {
                 if (cancelled) return
-                heatmapImage = loader
+                heatmapImageRef.current = loader
+                heatmapSrcRef.current = heatmapSrc
                 drawCanvasContent()
             }
             loader.onerror = () => {
                 console.error('Failed to load Grad-CAM heatmap image')
+                if (cancelled) return
                 drawCanvasContent()
             }
             loader.src = heatmapSrc
-        } else {
-            drawCanvasContent()
         }
+
+        ensureHeatmapThenDraw()
 
         window.addEventListener('resize', drawCanvasContent)
         return () => {
