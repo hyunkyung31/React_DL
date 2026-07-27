@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import angioImage from '../assets/angio_sample.png'
-import { Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Maximize2, Minimize2, FolderSearch, Upload } from 'lucide-react'
+import { 
+    Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, 
+    Maximize2, Minimize2, FolderSearch, Upload, 
+    BoxSelect, Type, PenTool, Trash2 
+} from 'lucide-react'
 
 function Main_viewer({
     patientData,
@@ -16,6 +20,16 @@ function Main_viewer({
     const [isDragging, setIsDragging] = useState(false)
     const [isFullscreen, setIsFullscreen] = useState(false)
     const [isImageLoaded, setIsImageLoaded] = useState(false)
+
+    // 주석 도구 상태 관리 ('bbox' | 'text' | 'pen' | null)
+    const [activeTool, setActiveTool] = useState(null)
+    const [userAnnotations, setUserAnnotations] = useState([]) // 사용자가 그린 주석 목록
+    const [currentText, setCurrentText] = useState('')
+    
+    // 그리기 인터랙션 임시 상태
+    const [isDrawing, setIsDrawing] = useState(false)
+    const [drawStartPos, setDrawStartPos] = useState({ x: 0, y: 0 })
+    const [currentPath, setCurrentPath] = useState([])
 
     // 드래그 앤 드롭 및 외부 이미지 상태
     const [customImageUrl, setCustomImageUrl] = useState(null)
@@ -35,12 +49,14 @@ function Main_viewer({
         { id: 2, x: 365, y: 310, width: 105, height: 80, label: 'Stenosis', confidence: 0.81 },
     ]
 
-    // 환자 데이터가 변경될 때 커스텀 업로드 이미지를 초기화하여 선택된 환자 데이터가 우선 보이도록 처리
+    // 환자 데이터 변경 시 초기화
     useEffect(() => {
         setCustomImageUrl(null)
         setIsImageLoaded(false)
         setScale(1)
         setPosition({ x: 0, y: 0 })
+        setUserAnnotations([])
+        setActiveTool(null)
     }, [patientData])
 
     useEffect(() => {
@@ -70,13 +86,14 @@ function Main_viewer({
         }
     }, [])
 
+    // AI 바운딩박스 및 사용자 커스텀 주석(박스, 펜, 텍스트) 렌더링 캔버스 로직
     useEffect(() => {
         const image = imageRef.current
         const canvas = overlayCanvasRef.current
 
         if (!image || !canvas || !isImageLoaded) return
 
-        const drawBoundingBoxes = () => {
+        const drawCanvasContent = () => {
             const imageWidth = image.clientWidth
             const imageHeight = image.clientHeight
 
@@ -93,43 +110,140 @@ function Main_viewer({
             context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
             context.clearRect(0, 0, imageWidth, imageHeight)
 
-            const shouldShowBoundingBox = overlayMode === 'boundingBox'
-            if (!shouldShowBoundingBox) return
-
             const scaleX = imageWidth / image.naturalWidth
             const scaleY = imageHeight / image.naturalHeight
 
-            mockBoundingBoxes
-                .filter((box) => box.confidence * 100 >= confidenceThreshold)
-                .forEach((box) => {
-                    const boxX = box.x * scaleX
-                    const boxY = box.y * scaleY
-                    const boxWidth = box.width * scaleX
-                    const boxHeight = box.height * scaleY
-                    const labelText = `${box.label} ${Math.round(box.confidence * 100)}%`
+            // 1. AI Bounding Box 렌더링
+            const shouldShowBoundingBox = overlayMode === 'boundingBox'
+            if (shouldShowBoundingBox) {
+                mockBoundingBoxes
+                    .filter((box) => box.confidence * 100 >= confidenceThreshold)
+                    .forEach((box) => {
+                        const boxX = box.x * scaleX
+                        const boxY = box.y * scaleY
+                        const boxWidth = box.width * scaleX
+                        const boxHeight = box.height * scaleY
+                        const labelText = `${box.label} ${Math.round(box.confidence * 100)}%`
 
-                    context.strokeStyle = '#ef4444'
-                    context.lineWidth = 4
-                    context.strokeRect(boxX, boxY, boxWidth, boxHeight)
+                        context.strokeStyle = '#ef4444'
+                        context.lineWidth = 3
+                        context.strokeRect(boxX, boxY, boxWidth, boxHeight)
 
-                    context.font = 'bold 14px sans-serif'
-                    const labelWidth = context.measureText(labelText).width + 10
-                    const labelHeight = 20
+                        context.font = 'bold 12px sans-serif'
+                        const labelWidth = context.measureText(labelText).width + 8
+                        const labelHeight = 18
 
-                    context.fillStyle = '#ef4444'
-                    context.fillRect(boxX, Math.max(boxY - labelHeight, 0), labelWidth, labelHeight)
+                        context.fillStyle = '#ef4444'
+                        context.fillRect(boxX, Math.max(boxY - labelHeight, 0), labelWidth, labelHeight)
 
+                        context.fillStyle = '#ffffff'
+                        context.fillText(labelText, boxX + 4, Math.max(boxY - 4, 12))
+                    })
+            }
+
+            // 2. 사용자가 직접 그린 주석(BBox, 펜, 텍스트) 렌더링
+            userAnnotations.forEach((ann) => {
+                if (ann.type === 'bbox') {
+                    context.strokeStyle = '#3b82f6' // 파란색 (의사 판독 주석 구분을 위해 색상 차별화)
+                    context.lineWidth = 3
+                    context.strokeRect(ann.x, ann.y, ann.width, ann.height)
+
+                    context.fillStyle = '#3b82f6'
+                    context.fillRect(ann.x, Math.max(ann.y - 18, 0), 65, 18)
                     context.fillStyle = '#ffffff'
-                    context.fillText(labelText, boxX + 5, Math.max(boxY - 5, 12))
-                })
+                    context.font = 'bold 11px sans-serif'
+                    context.fillText('Dr. Annotation', ann.x + 4, Math.max(ann.y - 4, 12))
+                } else if (ann.type === 'pen' && ann.path && ann.path.length > 0) {
+                    context.strokeStyle = '#10b981' // 펜은 초록색
+                    context.lineWidth = 3
+                    context.lineCap = 'round'
+                    context.beginPath()
+                    ann.path.forEach((pt, idx) => {
+                        if (idx === 0) context.moveTo(pt.x, pt.y)
+                        else context.lineTo(pt.x, pt.y)
+                    })
+                    context.stroke()
+                } else if (ann.type === 'text') {
+                    context.fillStyle = '#f59e0b' // 텍스트는 노란색
+                    context.font = 'bold 14px sans-serif'
+                    context.fillText(ann.text, ann.x, ann.y)
+                }
+            })
         }
 
-        drawBoundingBoxes()
-        window.addEventListener('resize', drawBoundingBoxes)
+        drawCanvasContent()
+        window.addEventListener('resize', drawCanvasContent)
         return () => {
-            window.removeEventListener('resize', drawBoundingBoxes)
+            window.removeEventListener('resize', drawCanvasContent)
         }
-    }, [overlayMode, confidenceThreshold, isImageLoaded])
+    }, [overlayMode, confidenceThreshold, isImageLoaded, userAnnotations])
+
+    // --- 주석 그리기 마우스 인터랙션 핸들러 ---
+    const handleCanvasMouseDown = (e) => {
+        if (!activeTool || isZoomMode) return
+        const rect = overlayCanvasRef.current.getBoundingClientRect()
+        const x = e.clientX - rect.left
+        const y = e.clientY - rect.top
+
+        if (activeTool === 'text') {
+            if (!currentText.trim()) {
+                alert('입력할 텍스트 주석 내용을 먼저 적어주세요.')
+                return
+            }
+            setUserAnnotations(prev => [...prev, { type: 'text', x, y, text: currentText }])
+            setCurrentText('')
+            setActiveTool(null)
+            return
+        }
+
+        setIsDrawing(true)
+        setDrawStartPos({ x, y })
+        if (activeTool === 'pen') {
+            setCurrentPath([{ x, y }])
+        }
+    }
+
+    const handleCanvasMouseMove = (e) => {
+        if (!isDrawing || !activeTool || isZoomMode) return
+        const rect = overlayCanvasRef.current.getBoundingClientRect()
+        const x = e.clientX - rect.left
+        const y = e.clientY - rect.top
+
+        if (activeTool === 'pen') {
+            setCurrentPath(prev => [...prev, { x, y }])
+        }
+    }
+
+    const handleCanvasMouseUp = (e) => {
+        if (!isDrawing || !activeTool || isZoomMode) return
+        const rect = overlayCanvasRef.current.getBoundingClientRect()
+        const x = e.clientX - rect.left
+        const y = e.clientY - rect.top
+
+        if (activeTool === 'bbox') {
+            const width = x - drawStartPos.x
+            const height = y - drawStartPos.y
+            if (Math.abs(width) > 5 && Math.abs(height) > 5) {
+                setUserAnnotations(prev => [
+                    ...prev,
+                    {
+                        type: 'bbox',
+                        x: width < 0 ? x : drawStartPos.x,
+                        y: height < 0 ? y : drawStartPos.y,
+                        width: Math.abs(width),
+                        height: Math.abs(height),
+                    },
+                ])
+            }
+        } else if (activeTool === 'pen') {
+            if (currentPath.length > 1) {
+                setUserAnnotations(prev => [...prev, { type: 'pen', path: currentPath }])
+            }
+        }
+
+        setIsDrawing(false)
+        setCurrentPath([])
+    }
 
     const handlePreviousFrame = () => {
         setIsPlaying(false)
@@ -171,11 +285,13 @@ function Main_viewer({
         setIsZoomMode(false)
         setIsDragging(false)
         setPosition({ x: 0, y: 0 })
+        setActiveTool(null)
     }
 
     const handleZoomToggle = () => {
         setIsZoomMode((prev) => {
             const next = !prev
+            if (next) setActiveTool(null) // 줌 모드 진입 시 주석 툴 해제
             if (!next) {
                 setScale(1)
                 setPosition({ x: 0, y: 0 })
@@ -197,6 +313,7 @@ function Main_viewer({
     }
 
     const handleMouseDown = (e) => {
+        if (activeTool) return // 주석 모드일 때는 뷰어 드래그 방지
         if (!isZoomMode || scale <= 1) return
         setIsDragging(true)
         dragStartRef.current = { mouseX: e.clientX, mouseY: e.clientY, imageX: position.x, imageY: position.y }
@@ -253,7 +370,7 @@ function Main_viewer({
                     <p className="text-xs text-gray-400">좌측 메뉴나 빠른 검색을 통해 진단할 환자를 선택해 주세요.</p>
                 </div>
             </section>
-        );
+        )
     }
 
     const getThumbnailFrames = () => {
@@ -266,7 +383,6 @@ function Main_viewer({
         return frames
     }
 
-    // 환자 데이터 내 이미지(또는 업로드된 커스텀 이미지)를 메인 뷰어의 소스로 설정
     const currentDisplayImage = customImageUrl || patientData?.imageUrl || patientData?.url || angioImage
 
     return (
@@ -274,7 +390,7 @@ function Main_viewer({
             ref={viewerRef}
             className="flex h-[calc(100vh-1.5rem)] max-h-[820px] flex-col overflow-hidden rounded-lg border border-gray-800 bg-gray-900 text-xs"
         >
-            {/* 상단 툴바 */}
+            {/* 상단 툴바 (기존 기능 + 주석 도구 추가) */}
             <div className="flex items-center justify-between border-b border-gray-800 px-3 py-2">
                 <div className="flex items-center gap-3">
                     <h2 className="text-sm font-semibold text-white">
@@ -291,7 +407,56 @@ function Main_viewer({
                     </select>
                 </div>
 
-                <div className="flex items-center gap-1.5">
+                {/* 주석 도구 및 뷰어 조작 버튼 그룹 */}
+                <div className="flex items-center gap-2">
+                    {/* 의사 판독 주석 도구들 */}
+                    <div className="flex items-center gap-1 rounded bg-gray-800/80 p-0.5 border border-gray-700">
+                        <button
+                            type="button"
+                            onClick={() => { setActiveTool(activeTool === 'bbox' ? null : 'bbox'); setIsZoomMode(false); }}
+                            className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold transition-all ${
+                                activeTool === 'bbox' ? 'bg-amber-500 text-black' : 'text-gray-300 hover:text-white'
+                            }`}
+                            title="박스(BBox) 그리기"
+                        >
+                            <BoxSelect size={13} />
+                            <span>박스</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { setActiveTool(activeTool === 'text' ? null : 'text'); setIsZoomMode(false); }}
+                            className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold transition-all ${
+                                activeTool === 'text' ? 'bg-indigo-500 text-white' : 'text-gray-300 hover:text-white'
+                            }`}
+                            title="텍스트 주석 추가"
+                        >
+                            <Type size={13} />
+                            <span>텍스트</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { setActiveTool(activeTool === 'pen' ? null : 'pen'); setIsZoomMode(false); }}
+                            className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold transition-all ${
+                                activeTool === 'pen' ? 'bg-emerald-500 text-black' : 'text-gray-300 hover:text-white'
+                            }`}
+                            title="자유선 펜 드로잉"
+                        >
+                            <PenTool size={13} />
+                            <span>펜</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setUserAnnotations([])}
+                            className="flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-red-400 hover:bg-red-950/50 hover:text-red-300 transition-all"
+                            title="모든 주석 삭제 (초기화)"
+                        >
+                            <Trash2 size={13} />
+                            <span>지우기</span>
+                        </button>
+                    </div>
+
+                    <div className="h-4 w-px bg-gray-700" />
+
                     <button
                         type="button"
                         onClick={handleZoomToggle}
@@ -319,14 +484,28 @@ function Main_viewer({
                 </div>
             </div>
 
-            {/* 중앙 이미지 뷰어 영역 (환자 선택 및 드래그 앤 드롭 연동) */}
+            {/* 텍스트 주석 입력 가이드 오버레이 */}
+            {activeTool === 'text' && (
+                <div className="absolute right-4 top-14 z-30 flex items-center gap-2 rounded-lg border border-indigo-500/50 bg-gray-900/95 p-2 shadow-xl backdrop-blur">
+                    <input
+                        type="text"
+                        value={currentText}
+                        onChange={(e) => setCurrentText(e.target.value)}
+                        placeholder="입력할 주석 내용을 적어주세요."
+                        className="rounded border border-gray-700 bg-gray-950 px-2.5 py-1 text-xs text-white placeholder-gray-500 focus:border-indigo-400 focus:outline-none"
+                    />
+                    <span className="text-[10px] text-indigo-300">영상의원 위치 클릭</span>
+                </div>
+            )}
+
+            {/* 중앙 이미지 뷰어 영역 */}
             <div
                 className={`relative flex flex-1 min-h-0 items-center justify-center overflow-hidden bg-black select-none transition-colors ${
                     isDragOver ? 'border-2 border-dashed border-blue-500 bg-blue-950/20' : ''
                 } ${
                     isZoomMode && scale > 1
                         ? isDragging ? 'cursor-grabbing' : 'cursor-grab'
-                        : isZoomMode ? 'cursor-zoom-in' : ''
+                        : activeTool ? 'cursor-crosshair' : isZoomMode ? 'cursor-zoom-in' : ''
                 }`}
                 onWheel={handleWheelZoom}
                 onMouseDown={handleMouseDown}
@@ -376,12 +555,18 @@ function Main_viewer({
                                 src={currentDisplayImage}
                                 alt="혈관조영술"
                                 onLoad={() => setIsImageLoaded(true)}
-                                className="max-h-[calc(100vh-280px)] max-w-full select-none object-contain"
+                                className="max-h-[calc(100vh-280px)] max-w-full select-none object-contain pointer-events-none"
                                 draggable={false}
                             />
+                            {/* 주석 및 AI BBox가 그려지는 캔버스 레이어 */}
                             <canvas
                                 ref={overlayCanvasRef}
-                                className="pointer-events-none absolute left-0 top-0 h-full w-full"
+                                onMouseDown={handleCanvasMouseDown}
+                                onMouseMove={handleCanvasMouseMove}
+                                onMouseUp={handleCanvasMouseUp}
+                                className={`absolute left-0 top-0 h-full w-full ${
+                                    activeTool ? 'pointer-events-auto cursor-crosshair' : 'pointer-events-none'
+                                }`}
                             />
                         </div>
                     )}
@@ -507,7 +692,7 @@ function Main_viewer({
                 </div>
             </div>
         </section>
-    );
+    )
 }
 
-export default Main_viewer;
+export default Main_viewer
