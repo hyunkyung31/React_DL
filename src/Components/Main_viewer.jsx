@@ -11,6 +11,8 @@ function Main_viewer({
     overlayMode,
     confidenceThreshold,
     aiFileUrl = null,
+    aiResult = null,
+    heatmapOpacity = 70,
 }) {
     const [currentFrame, setCurrentFrame] = useState(125)
     const [isPlaying, setIsPlaying] = useState(false)
@@ -92,44 +94,100 @@ function Main_viewer({
         }
     }, [])
 
-    // AI 바운딩박스 및 사용자 커스텀 주석(박스, 펜, 텍스트) 렌더링 캔버스 로직
+    // AI 히트맵 / 바운딩박스 + 사용자 주석 캔버스
     useEffect(() => {
         const image = imageRef.current
         const canvas = overlayCanvasRef.current
 
         if (!image || !canvas || !isImageLoaded) return
 
+        let cancelled = false
+        let heatmapImage = null
+
+        const toDataUrl = (value) => {
+            if (!value) return null
+            if (String(value).startsWith('data:')) return String(value)
+            return `data:image/png;base64,${value}`
+        }
+
+        const heatmapSrc = toDataUrl(
+            aiResult?.heatmap_base64 || aiResult?.overlay_base64
+        )
+
+        const boxes = aiResult
+            ? (aiResult.bounding_boxes || aiResult.boxes || [])
+            : mockBoundingBoxes
+
+        const drawAnnotations = (context) => {
+            userAnnotations.forEach((ann) => {
+                if (ann.type === 'bbox') {
+                    context.strokeStyle = '#3b82f6'
+                    context.lineWidth = 3
+                    context.strokeRect(ann.x, ann.y, ann.width, ann.height)
+
+                    context.fillStyle = '#3b82f6'
+                    context.fillRect(ann.x, Math.max(ann.y - 18, 0), 65, 18)
+                    context.fillStyle = '#ffffff'
+                    context.font = 'bold 11px sans-serif'
+                    context.fillText('Dr. Annotation', ann.x + 4, Math.max(ann.y - 4, 12))
+                } else if (ann.type === 'pen' && ann.path && ann.path.length > 0) {
+                    context.strokeStyle = '#10b981'
+                    context.lineWidth = 3
+                    context.lineCap = 'round'
+                    context.beginPath()
+                    ann.path.forEach((pt, idx) => {
+                        if (idx === 0) context.moveTo(pt.x, pt.y)
+                        else context.lineTo(pt.x, pt.y)
+                    })
+                    context.stroke()
+                } else if (ann.type === 'text') {
+                    context.fillStyle = '#f59e0b'
+                    context.font = 'bold 14px sans-serif'
+                    context.fillText(ann.text, ann.x, ann.y)
+                }
+            })
+        }
+
         const drawCanvasContent = () => {
+            if (cancelled) return
+
             const imageWidth = image.clientWidth
             const imageHeight = image.clientHeight
-
             if (imageWidth === 0 || imageHeight === 0) return
 
             const pixelRatio = window.devicePixelRatio || 1
-
             canvas.width = imageWidth * pixelRatio
             canvas.height = imageHeight * pixelRatio
             canvas.style.width = `${imageWidth}px`
             canvas.style.height = `${imageHeight}px`
 
             const context = canvas.getContext('2d')
+            if (!context) return
+
             context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
             context.clearRect(0, 0, imageWidth, imageHeight)
 
-            const scaleX = imageWidth / image.naturalWidth
-            const scaleY = imageHeight / image.naturalHeight
+            // 1. Grad-CAM heatmap
+            if (overlayMode === 'heatmap' && heatmapImage) {
+                context.save()
+                context.globalAlpha = Math.max(0, Math.min(1, (heatmapOpacity || 0) / 100))
+                context.drawImage(heatmapImage, 0, 0, imageWidth, imageHeight)
+                context.restore()
+            }
 
-            // 1. AI Bounding Box 렌더링
-            const shouldShowBoundingBox = overlayMode === 'boundingBox'
-            if (shouldShowBoundingBox) {
-                mockBoundingBoxes
-                    .filter((box) => box.confidence * 100 >= confidenceThreshold)
+            // 2. AI Bounding Box
+            if (overlayMode === 'boundingBox') {
+                const scaleX = image.naturalWidth ? imageWidth / image.naturalWidth : 1
+                const scaleY = image.naturalHeight ? imageHeight / image.naturalHeight : 1
+
+                boxes
+                    .filter((box) => (box.confidence ?? 0) * 100 >= confidenceThreshold)
                     .forEach((box) => {
-                        const boxX = box.x * scaleX
-                        const boxY = box.y * scaleY
-                        const boxWidth = box.width * scaleX
-                        const boxHeight = box.height * scaleY
-                        const labelText = `${box.label} ${Math.round(box.confidence * 100)}%`
+                        const boxX = (box.x ?? 0) * scaleX
+                        const boxY = (box.y ?? 0) * scaleY
+                        const boxWidth = (box.width ?? 0) * scaleX
+                        const boxHeight = (box.height ?? 0) * scaleY
+                        const labelText = `${box.label || 'Stenosis'} ${Math.round((box.confidence ?? 0) * 100)}%`
 
                         context.strokeStyle = '#ef4444'
                         context.lineWidth = 3
@@ -147,42 +205,39 @@ function Main_viewer({
                     })
             }
 
-            // 2. 사용자가 직접 그린 주석(BBox, 펜, 텍스트) 렌더링
-            userAnnotations.forEach((ann) => {
-                if (ann.type === 'bbox') {
-                    context.strokeStyle = '#3b82f6' // 파란색 (의사 판독 주석 구분을 위해 색상 차별화)
-                    context.lineWidth = 3
-                    context.strokeRect(ann.x, ann.y, ann.width, ann.height)
-
-                    context.fillStyle = '#3b82f6'
-                    context.fillRect(ann.x, Math.max(ann.y - 18, 0), 65, 18)
-                    context.fillStyle = '#ffffff'
-                    context.font = 'bold 11px sans-serif'
-                    context.fillText('Dr. Annotation', ann.x + 4, Math.max(ann.y - 4, 12))
-                } else if (ann.type === 'pen' && ann.path && ann.path.length > 0) {
-                    context.strokeStyle = '#10b981' // 펜은 초록색
-                    context.lineWidth = 3
-                    context.lineCap = 'round'
-                    context.beginPath()
-                    ann.path.forEach((pt, idx) => {
-                        if (idx === 0) context.moveTo(pt.x, pt.y)
-                        else context.lineTo(pt.x, pt.y)
-                    })
-                    context.stroke()
-                } else if (ann.type === 'text') {
-                    context.fillStyle = '#f59e0b' // 텍스트는 노란색
-                    context.font = 'bold 14px sans-serif'
-                    context.fillText(ann.text, ann.x, ann.y)
-                }
-            })
+            // 3. user annotations
+            drawAnnotations(context)
         }
 
-        drawCanvasContent()
+        if (overlayMode === 'heatmap' && heatmapSrc) {
+            const loader = new Image()
+            loader.onload = () => {
+                if (cancelled) return
+                heatmapImage = loader
+                drawCanvasContent()
+            }
+            loader.onerror = () => {
+                console.error('Failed to load Grad-CAM heatmap image')
+                drawCanvasContent()
+            }
+            loader.src = heatmapSrc
+        } else {
+            drawCanvasContent()
+        }
+
         window.addEventListener('resize', drawCanvasContent)
         return () => {
+            cancelled = true
             window.removeEventListener('resize', drawCanvasContent)
         }
-    }, [overlayMode, confidenceThreshold, isImageLoaded, userAnnotations])
+    }, [
+        overlayMode,
+        confidenceThreshold,
+        heatmapOpacity,
+        isImageLoaded,
+        userAnnotations,
+        aiResult,
+    ])
 
     // --- 주석 그리기 마우스 인터랙션 핸들러 ---
     const handleCanvasMouseDown = (e) => {
