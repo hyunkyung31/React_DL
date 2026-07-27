@@ -42,22 +42,20 @@ export default function ConsultationView({ selectedPatient, currentUserName }) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // 1. 초기 데이터 로드 (인증 헤더 포함 API 호출)
+  // 1. 초기 데이터 로드 (환자, 의사, 협진 목록 병렬 API 호출)
   const fetchInitialData = async () => {
     setLoading(true)
     try {
-      // 로컬 스토리지 등에서 인증 토큰 가져오기 (프로젝트 환경에 맞게 키 이름 수정 필요)
       const token = localStorage.getItem('token') || ''
-
       const headers = {
         'Content-Type': 'application/json',
         ...(token ? { 'Authorization': `Bearer ${token}` } : {})
       }
 
-      // 병렬로 API 호출
-      const [patientRes, doctorRes] = await Promise.all([
+      const [patientRes, doctorRes, consultRes] = await Promise.all([
         fetch('http://34.80.83.7:8000/api/patients', { headers }),
-        fetch('http://34.80.83.7:8000/api/doctors', { headers })
+        fetch('http://34.80.83.7:8000/api/doctors', { headers }),
+        fetch('http://34.80.83.7:8000/api/consultations', { headers })
       ])
 
       if (patientRes.ok) {
@@ -72,6 +70,13 @@ export default function ConsultationView({ selectedPatient, currentUserName }) {
         setDoctorsList(doctorData)
       } else {
         console.error('의사 목록 불러오기 실패:', doctorRes.status)
+      }
+
+      if (consultRes.ok) {
+        const consultData = await consultRes.json()
+        setConsultations(consultData)
+      } else {
+        console.error('협진 목록 불러오기 실패:', consultRes.status)
       }
 
     } catch (error) {
@@ -102,6 +107,15 @@ export default function ConsultationView({ selectedPatient, currentUserName }) {
     item.department?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (item.receiver && item.receiver.toLowerCase().includes(searchTerm.toLowerCase()))
   )
+
+  // [수정 포인트] 신규 폼 내 환자 검색 필터링 로직 개선 (대소문자 무시 및 공백 제거 안전 처리)
+  const filteredPatients = patientList.filter(p => {
+    const query = (newForm.patientName || '').trim().toLowerCase()
+    const name = (p.patient_name || '').toLowerCase()
+    const id = (p.patient_id || '').toLowerCase()
+    // 빈 값이면 전체 목록 표시, 아니면 이름이나 ID에 포함되는지 확인
+    return query === '' || name.includes(query) || id.includes(query)
+  })
 
   // 2. 신규 협진 요청 전송 (POST API 연동)
   const handleCreateSubmit = async (e) => {
@@ -256,31 +270,27 @@ export default function ConsultationView({ selectedPatient, currentUserName }) {
                   {/* 환자 API 리스트 드롭다운 */}
                   {isPatientDropdownOpen && (
                     <div className="absolute left-0 right-0 mt-1 bg-gray-800 border border-gray-700 rounded-md shadow-lg max-h-48 overflow-y-auto z-50">
-                      {patientList
-                        .filter(p => p.patient_name?.includes(newForm.patientName) || p.patient_id?.includes(newForm.patientName))
-                        .length === 0 ? (
-                          <div className="p-2.5 text-gray-400 text-center">검색된 환자가 없습니다.</div>
-                        ) : (
-                          patientList
-                            .filter(p => p.patient_name?.includes(newForm.patientName) || p.patient_id?.includes(newForm.patientName))
-                            .map(patient => (
-                              <div 
-                                key={patient.patient_id}
-                                onClick={() => {
-                                  setNewForm(prev => ({
-                                    ...prev,
-                                    patientName: patient.patient_name,
-                                    patientId: patient.patient_id
-                                  }))
-                                  setIsPatientDropdownOpen(false)
-                                }}
-                                className="px-3 py-2 hover:bg-gray-700 cursor-pointer flex justify-between items-center text-white"
-                              >
-                                <span className="font-semibold">{patient.patient_name}</span>
-                                <span className="text-gray-400 font-mono text-[11px]">{patient.patient_id}</span>
-                              </div>
-                            ))
-                        )}
+                      {filteredPatients.length === 0 ? (
+                        <div className="p-2.5 text-gray-400 text-center">검색된 환자가 없습니다.</div>
+                      ) : (
+                        filteredPatients.map(patient => (
+                          <div 
+                            key={patient.patient_id}
+                            onClick={() => {
+                              setNewForm(prev => ({
+                                ...prev,
+                                patientName: patient.patient_name,
+                                patientId: patient.patient_id
+                              }))
+                              setIsPatientDropdownOpen(false)
+                            }}
+                            className="px-3 py-2 hover:bg-gray-700 cursor-pointer flex justify-between items-center text-white"
+                          >
+                            <span className="font-semibold">{patient.patient_name}</span>
+                            <span className="text-gray-400 font-mono text-[11px]">{patient.patient_id}</span>
+                          </div>
+                        ))
+                      )}
                     </div>
                   )}
                 </div>
