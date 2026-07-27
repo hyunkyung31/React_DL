@@ -1,11 +1,15 @@
 import { useState } from 'react'
+import axios from 'axios'
 import { CheckCircle2, FileCheck2, Pencil } from 'lucide-react'
+
+const API_BASE = 'http://34.80.83.7:8000'
 
 export default function EmrConfirmPanel({
   impression = '',
   selectedVessels = [],
   pciNeeded = null,
   onSignOff,
+  patientId,
 }) {
   const [isSignedOff, setIsSignedOff] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -18,6 +22,11 @@ export default function EmrConfirmPanel({
       return
     }
 
+    if (!patientId) {
+      alert('환자를 먼저 선택하세요.')
+      return
+    }
+
     const confirmed = window.confirm(
       '최종 판독을 확정하고 EMR로 전송하시겠습니까?\n확정 후에는 판독 내용을 수정할 수 없습니다.'
     )
@@ -27,26 +36,30 @@ export default function EmrConfirmPanel({
     try {
       setIsSubmitting(true)
 
-      const signOffData = {
-        impression: impression.trim(),
-        selectedVessels,
-        pciNeeded,
-        status: 'signed_off',
-        signedOffAt: new Date().toISOString(),
+      const payload = {
+        patient_id: patientId,
+        finalized: true,
+        final_result: impression.trim(),
+        ai_result: null,
+        report_ready: true,
+        emr_transmitted: true,
       }
 
-      /*
-       * 실제 EMR API가 연결되면 부모 함수에서 처리합니다.
-       * API가 없어도 현재 UI에서는 확정 상태로 변경됩니다.
-       */
-      if (onSignOff) { await onSignOff(signOffData) }
+      if (onSignOff) {
+        await onSignOff(payload)
+      } else {
+        const token = localStorage.getItem('access')
+        await axios.post(`${API_BASE}/api/emr-signoffs/`, payload, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      }
 
       setIsSignedOff(true)
       alert('최종 판독 확정 및 EMR 전송이 완료되었습니다.')
     } catch (error) {
       console.error('EMR 확정 오류:', error)
-
       alert(
+        error?.response?.data?.detail ||
         error?.message ||
         'EMR 확정 처리 중 오류가 발생했습니다.'
       )

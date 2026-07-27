@@ -7,8 +7,10 @@ import {
 } from 'lucide-react'
 
 function Xai_visualization({
-    overlayMode,
-    setOverlayMode,
+    showHeatmap = true,
+    setShowHeatmap,
+    showBoundingBox = true,
+    setShowBoundingBox,
     heatmapOpacity,
     setHeatmapOpacity,
     confidenceThreshold,
@@ -21,11 +23,15 @@ function Xai_visualization({
         value: 'boundingBox',
         label: 'Bounding Box',
         icon: Box,
+        active: showBoundingBox,
+        onToggle: () => setShowBoundingBox?.((v) => !v),
     },
     {
         value: 'heatmap',
         label: 'Heatmap',
         icon: Flame,
+        active: showHeatmap,
+        onToggle: () => setShowHeatmap?.((v) => !v),
     },
   ]
 
@@ -63,13 +69,13 @@ function Xai_visualization({
           <div className="grid grid-cols-2 gap-2">
             {overlayOptions.map((option) => {
               const Icon = option.icon
-              const isSelected = overlayMode === option.value
+              const isSelected = Boolean(option.active)
 
               return (
                 <button
                   key={option.value}
                   type="button"
-                  onClick={() => setOverlayMode(option.value)}
+                  onClick={option.onToggle}
                   className={`flex min-h-24 flex-col items-center justify-center gap-2 rounded-lg border px-2 py-3 text-xs transition-colors ${
                     isSelected
                       ? 'border-blue-500 bg-blue-600 text-white'
@@ -109,13 +115,13 @@ function Xai_visualization({
             onChange={(event) =>
               setHeatmapOpacity(Number(event.target.value))
             }
-            disabled={overlayMode === 'boundingBox'}
+            disabled={!showHeatmap}
             className="h-1.5 w-full cursor-pointer accent-blue-500 disabled:cursor-not-allowed disabled:opacity-30"
           />
 
-          {overlayMode === 'boundingBox' && (
+          {!showHeatmap && (
             <p className="mt-2 text-xs text-gray-500">
-              Heatmap 표시 모드에서 조절할 수 있습니다.
+              Heatmap을 켠 뒤 투명도를 조절할 수 있습니다.
             </p>
           )}
         </div>
