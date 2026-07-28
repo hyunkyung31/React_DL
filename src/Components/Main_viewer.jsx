@@ -640,6 +640,7 @@ function Main_viewer({
                         >
                             <img
                                 ref={imageRef}
+                                data-viewer-base-image="true"
                                 src={currentDisplayImage}
                                 alt="혈관조영술"
                                 onLoad={() => setIsImageLoaded(true)}
@@ -649,6 +650,7 @@ function Main_viewer({
                             {/* 주석 및 AI BBox가 그려지는 캔버스 레이어 */}
                             <canvas
                                 ref={overlayCanvasRef}
+                                data-viewer-overlay-canvas="true"
                                 onMouseDown={handleCanvasMouseDown}
                                 onMouseMove={handleCanvasMouseMove}
                                 onMouseUp={handleCanvasMouseUp}

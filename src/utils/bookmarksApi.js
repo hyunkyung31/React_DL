@@ -88,11 +88,20 @@ export async function updateBookmark(id, payload) {
 }
 
 export async function deleteBookmark(id) {
+  if (id == null || id === '') {
+    throw new Error('bookmark delete failed: missing id')
+  }
+  const access = localStorage.getItem('access')
   const res = await fetch(`${API_BASE}/api/bookmarks/${id}/`, {
     method: 'DELETE',
-    headers: authHeaders(),
+    headers: {
+      ...(access ? { Authorization: `Bearer ${access}` } : {}),
+    },
   })
-  if (!res.ok && res.status !== 204) {
-    throw new Error(`bookmark delete failed: ${res.status}`)
+  // 이미 서버에 없으면(404) UI에서는 삭제된 것으로 처리
+  if (!res.ok && res.status !== 204 && res.status !== 404) {
+    const err = await res.text().catch(() => '')
+    throw new Error(`bookmark delete failed: ${res.status} ${err}`)
   }
+  return res.status
 }

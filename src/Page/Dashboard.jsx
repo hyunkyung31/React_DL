@@ -477,32 +477,47 @@ export default function Dashboard({
           ]
         : []
 
-    let capturedSnapshotUrl = null;
-    const videoElement = document.querySelector('video'); 
-    const canvasElement = document.querySelector('canvas');
+    let capturedSnapshotUrl = null
+    const baseImage = document.querySelector('[data-viewer-base-image="true"]')
+    const overlayCanvas = document.querySelector('[data-viewer-overlay-canvas="true"]')
+    const videoElement = document.querySelector('video')
 
-    if (canvasElement) {
+    // 원본 혈관조영 이미지 + 히트맵/bbox 오버레이를 한 장으로 합성
+    if (baseImage && baseImage.complete && baseImage.naturalWidth > 0) {
       try {
-        capturedSnapshotUrl = canvasElement.toDataURL('image/png');
+        const width = baseImage.naturalWidth
+        const height = baseImage.naturalHeight
+        const tempCanvas = document.createElement('canvas')
+        tempCanvas.width = width
+        tempCanvas.height = height
+        const ctx = tempCanvas.getContext('2d')
+        ctx.drawImage(baseImage, 0, 0, width, height)
+        if (overlayCanvas && overlayCanvas.width > 0 && overlayCanvas.height > 0) {
+          ctx.drawImage(overlayCanvas, 0, 0, width, height)
+        }
+        capturedSnapshotUrl = tempCanvas.toDataURL('image/png')
       } catch (e) {
-        console.error('캔버스 캡처 실패:', e);
+        console.error('뷰어 합성 캡처 실패:', e)
       }
     } else if (videoElement) {
       try {
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = videoElement.videoWidth || 640;
-        tempCanvas.height = videoElement.videoHeight || 480;
-        const ctx = tempCanvas.getContext('2d');
-        ctx.drawImage(videoElement, 0, 0, tempCanvas.width, tempCanvas.height);
-        capturedSnapshotUrl = tempCanvas.toDataURL('image/png');
+        const tempCanvas = document.createElement('canvas')
+        tempCanvas.width = videoElement.videoWidth || 640
+        tempCanvas.height = videoElement.videoHeight || 480
+        const ctx = tempCanvas.getContext('2d')
+        ctx.drawImage(videoElement, 0, 0, tempCanvas.width, tempCanvas.height)
+        if (overlayCanvas && overlayCanvas.width > 0 && overlayCanvas.height > 0) {
+          ctx.drawImage(overlayCanvas, 0, 0, tempCanvas.width, tempCanvas.height)
+        }
+        capturedSnapshotUrl = tempCanvas.toDataURL('image/png')
       } catch (e) {
-        console.error('비디오 캡처 실패:', e);
+        console.error('비디오 캡처 실패:', e)
       }
     }
 
-    // cross-origin 캔버스 실패 시 현재 뷰어 이미지 URL로 폴백
+    // cross-origin 등으로 합성 실패 시 현재 뷰어 이미지 URL로 폴백
     if (!capturedSnapshotUrl && aiFileUrl) {
-      capturedSnapshotUrl = aiFileUrl;
+      capturedSnapshotUrl = aiFileUrl
     }
 
     onAddBookmark({

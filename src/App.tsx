@@ -120,9 +120,16 @@ function App() {
     try {
       await deleteBookmark(id)
       setBookmarks((prev) => prev.filter((b) => b.id !== id))
+      try {
+        const cache = JSON.parse(localStorage.getItem('bookmark_snapshots') || '{}')
+        delete cache[String(id)]
+        localStorage.setItem('bookmark_snapshots', JSON.stringify(cache))
+      } catch (_) {
+        /* ignore */
+      }
     } catch (err) {
       console.error(err)
-      alert('북마크 삭제에 실패했습니다.')
+      alert(`북마크 삭제에 실패했습니다.\n${err instanceof Error ? err.message : ''}`)
     }
   }
 
